@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ClinTAB-ML-Foundry</title>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --ink:#1f2733; --muted:#6b7785;
+    --line:#e2e7ee; --brand:#2c6fb3; --brand-d:#21507f; --ok:#2f8f5b;
+    --warn:#c2790f; --err:#c0392b; --chip:#eef3f9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       color:var(--ink);background:var(--bg)}
+  a{color:var(--brand)}
+  .app{display:flex;min-height:100vh}
+  /* sidebar */
+  .side{width:230px;background:#16283d;color:#cdd9e6;flex-shrink:0;padding:18px 0}
+  .side h1{font-size:15px;margin:0 18px 4px;color:#fff;letter-spacing:.3px}
+  .side .sub{font-size:11px;color:#7f93aa;margin:0 18px 18px}
+  .nav a{display:flex;gap:9px;align-items:center;padding:10px 18px;color:#cdd9e6;
+        text-decoration:none;cursor:pointer;border-left:3px solid transparent;font-size:13px}
+  .nav a:hover{background:#1d3550}
+  .nav a.active{background:#1d3550;border-left-color:var(--brand);color:#fff}
+  .nav .step{width:20px;height:20px;border-radius:50%;background:#27405d;display:inline-flex;
+        align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+  .nav a.done .step{background:var(--ok);color:#fff}
+  /* main */
+  main{flex:1;padding:26px 34px;max-width:1180px}
+  h2{font-size:20px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 20px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+         padding:20px;margin-bottom:18px}
+  .panel h3{margin:0 0 12px;font-size:15px}
+  .section{display:none}
+  .section.active{display:block}
+  /* controls */
+  button{background:var(--brand);color:#fff;border:0;border-radius:7px;padding:9px 16px;
+         font-size:13px;cursor:pointer;font-weight:600}
+  button:hover{background:var(--brand-d)}
+  button.ghost{background:#eef3f9;color:var(--brand-d)}
+  button.ghost:hover{background:#dfe9f4}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.sm{padding:5px 10px;font-size:12px}
+  select,input[type=text],input[type=number],textarea{font:inherit;padding:7px 9px;
+    border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);width:100%}
+  textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  label{font-weight:600;font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  .row{display:flex;gap:16px;flex-wrap:wrap}
+  .row>div{flex:1;min-width:160px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .drop{border:2px dashed #b7c6d8;border-radius:10px;padding:38px;text-align:center;
+        color:var(--muted);background:#fafcff;cursor:pointer}
+  .drop.over{border-color:var(--brand);background:#eef5fc}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left}
+  th{background:#f3f6fa;position:sticky;top:0}
+  .scroll{max-height:380px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .scrollx{overflow:auto}
+  .chip{display:inline-block;background:var(--chip);border-radius:20px;padding:2px 10px;
+        font-size:11px;color:var(--brand-d);margin:2px}
+  .pill{font-size:11px;padding:2px 8px;border-radius:10px}
+  .pill.binary{background:#e7f0fb;color:#1d5fa0}
+  .pill.categorical{background:#fdf0e3;color:#a86511}
+  .pill.continuous{background:#e8f6ee;color:#23774a}
+  .pill.date{background:#efeaf7;color:#6b4fa0}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .card{background:#f7fafd;border:1px solid var(--line);border-radius:9px;padding:14px}
+  .card .big{font-size:24px;font-weight:700;color:var(--brand-d)}
+  .card .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+  .muted{color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+  .bar{height:14px;background:#e6edf5;border-radius:8px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--brand);width:0;transition:width .3s}
+  .log{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0f1c2b;color:#cfe0f0;
+       border-radius:8px;padding:10px;max-height:160px;overflow:auto;white-space:pre-wrap}
+  .toast{position:fixed;right:18px;bottom:18px;background:#16283d;color:#fff;padding:12px 16px;
+         border-radius:8px;font-size:13px;max-width:360px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:50}
+  .toast.err{background:var(--err)} .toast.ok{background:var(--ok)}
+  img.plot{max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .plotwrap{display:inline-block;margin:8px 12px 8px 0;vertical-align:top}
+  .checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
+  .checklist label{font-weight:500;color:var(--ink);display:flex;gap:7px;align-items:center;
+        background:#f7fafd;border:1px solid var(--line);border-radius:6px;padding:7px 9px;cursor:pointer}
+  details{border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-top:8px;background:#fafcff}
+  summary{cursor:pointer;font-weight:600;font-size:12px;color:var(--brand-d)}
+  .err-text{color:var(--err);font-size:12px}
+  .ok-text{color:var(--ok);font-weight:600}
+  .small{font-size:12px}
+  .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .spinner{border:3px solid #dfe9f4;border-top-color:var(--brand);border-radius:50%;
+    width:34px;height:34px;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .busy{position:fixed;inset:0;background:rgba(244,246,249,.78);display:none;
+    align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:60}
+  .busy.show{display:flex}
+  .busy .msg{font-weight:600;color:var(--ink)}
+  .busy .sub2{font-size:12px;color:var(--muted)}
+  .busy .pbar{width:260px;height:8px;background:#e6edf5;border-radius:6px;overflow:hidden}
+  .busy .pbar>i{display:block;height:100%;width:0;background:var(--brand);transition:width .15s}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <h1>ClinTAB-ML-Foundry</h1>
+    <div class="sub">Clinical ML for tabular registries</div>
+    <nav class="nav" id="nav">
+      <a data-tab="upload" class="active"><span class="step">1</span> Data Upload</a>
+      <a data-tab="summary"><span class="step">2</span> Data Summary</a>
+      <a data-tab="train"><span class="step">3</span> Model Training</a>
+      <a data-tab="test"><span class="step">4</span> Model Testing</a>
+      <a data-tab="spline"><span class="step">5</span> Spline</a>
+      <a data-tab="epi"><span class="step">6</span> Clinical Epi</a>
+    </nav>
+    <div class="sub" style="margin-top:24px" id="sessionTag">No dataset loaded</div>
+  </aside>
+
+  <main>
+    <!-- ================= UPLOAD ================= -->
+    <section class="section active" id="tab-upload">
+      <h2>Data Upload</h2>
+      <p class="lead">Drop a CSV. Columns are auto-typed; override anything, set the split, then confirm.</p>
+
+      <div class="panel">
+        <div id="drop" class="drop">
+          <strong>Drop CSV here</strong> or click to browse<br>
+          <span class="small">Parsed in-browser for instant preview; the raw file is sent to the server for processing.</span>
+          <input id="fileInput" type="file" accept=".csv" style="display:none">
+        </div>
+        <div id="uploadInfo" class="hint"></div>
+      </div>
+
+      <div class="panel" id="previewPanel" style="display:none">
+        <h3>Preview <span class="muted small" id="previewMeta"></span></h3>
+        <div class="scroll scrollx"><table id="previewTable"></table></div>
+      </div>
+
+      <div class="panel" id="typePanel" style="display:none">
+        <h3>Column types &amp; missing-data handling</h3>
+        <p class="hint">Auto-detected: <b>binary</b>=2 values, <b>categorical</b>=strings or &lt;10 integers,
+          <b>continuous</b>=numeric &gt;10 values. Columns over 50% missing are flagged — choose include / fill 0 / remove.</p>
+        <div class="scroll"><table id="typeTable"></table></div>
+      </div>
+
+      <div class="panel" id="splitPanel" style="display:none">
+        <h3>Train / Validation / Test split</h3>
+        <div class="row">
+          <div><label>Train %</label><input id="rTrain" type="number" value="70" min="1" max="98"></div>
+          <div><label>Validation %</label><input id="rVal" type="number" value="15" min="1" max="98"></div>
+          <div><label>Test %</label><input id="rTest" type="number" value="15" min="1" max="98"></div>
+          <div><label>Method</label>
+            <select id="splitMethod"><option value="random">Random</option>
+              <option value="stratified">Stratified</option></select></div>
+          <div><label>Stratify / SMOTE column</label><select id="stratCol"><option value="">— none —</option></select></div>
+        </div>
+        <div id="smoteBox" style="margin-top:12px;display:none">
+          <label class="flex" style="font-weight:600;color:var(--ink)">
+            <input type="checkbox" id="smoteToggle"> Apply SMOTE to the training set (minority class &lt; 30%)</label>
+          <div class="hint" id="smoteHint"></div>
+        </div>
+        <div style="margin-top:16px" class="flex">
+          <button id="confirmBtn">Confirm &amp; lock dataset</button>
+          <span id="confirmMsg" class="small"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SUMMARY ================= -->
+    <section class="section" id="tab-summary">
+      <h2>Data Summary</h2>
+      <p class="lead">Descriptive statistics of the confirmed dataset.</p>
+      <div id="summaryEmpty" class="panel muted">Confirm a dataset first.</div>
+      <div id="summaryBody" style="display:none">
+        <div class="panel"><div class="cards" id="summaryCards"></div></div>
+        <div class="panel"><h3>Continuous variables</h3>
+          <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('contTable','continuous_summary.csv')">Download CSV</button></div>
+          <div class="scroll scrollx"><table id="contTable"></table></div></div>
+        <div class="panel"><h3>Binary &amp; categorical variables</h3>
+          <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('catTable','categorical_summary.csv')">Download CSV</button></div>
+          <div class="scroll scrollx"><table id="catTable"></table></div></div>
+      </div>
+    </section>
+
+    <!-- ================= TRAIN ================= -->
+    <section class="section" id="tab-train">
+      <h2>Model Training</h2>
+      <p class="lead">Pick an outcome and models, tune on the validation set, stream progress.</p>
+      <div id="trainEmpty" class="panel muted">Confirm a dataset first.</div>
+      <div id="trainBody" style="display:none">
+        <div class="panel">
+          <h3>1 · Outcome &amp; variables</h3>
+          <div class="row">
+            <div><label>Outcome</label><select id="outcomeSel"></select>
+                 <div class="hint" id="taskHint"></div></div>
+            <div><label>Optimize for (grid search metric)</label><select id="scoreSel"></select></div>
+            <div><label>Classification threshold</label><input id="thrInput" type="number" value="0.5" step="0.05" min="0" max="1"></div>
+          </div>
+          <div class="grid2" style="margin-top:12px">
+            <div><label>Exclusion variables (never used as features)</label>
+              <select id="excludeSel" multiple size="6"></select></div>
+            <div><label>Confounding variables (forced in, tagged)</label>
+              <select id="confoundSel" multiple size="6"></select></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>2 · Models <span class="muted small" id="modelTaskLbl"></span></h3>
+          <div class="flex" style="margin-bottom:8px">
+            <button class="ghost sm" onclick="toggleModels(true)">Select all</button>
+            <button class="ghost sm" onclick="toggleModels(false)">Clear</button>
+            <label class="flex" style="margin-left:auto;font-weight:600;color:var(--ink)">
+              <input type="checkbox" id="gridToggle" checked> Grid search (tune hyperparameters)</label>
+            <label class="flex" style="font-weight:600;color:var(--ink)" id="smoteTrainBox">
+              <input type="checkbox" id="smoteTrain"> SMOTE</label>
+          </div>
+          <div class="checklist" id="modelList"></div>
+          <details><summary>Edit hyperparameter grids (JSON per model)</summary>
+            <p class="hint">Defaults shown. Only selected models are trained. Leave as-is to use defaults.</p>
+            <div id="gridEditors"></div></details>
+        </div>
+        <div class="panel">
+          <div class="flex"><button id="trainBtn">Start training</button>
+            <div style="flex:1"><div class="bar"><i id="trainBar"></i></div></div>
+            <span id="trainPct" class="small muted"></span></div>
+          <div class="log" id="trainLog" style="margin-top:12px;display:none"></div>
+        </div>
+        <div class="panel" id="trainResults" style="display:none">
+          <h3>Validation metrics</h3>
+          <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('valMetricsTable','validation_metrics.csv')">Download CSV</button></div>
+          <div class="scrollx"><table id="valMetricsTable"></table></div>
+          <div id="importanceWrap" style="margin-top:14px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TEST ================= -->
+    <section class="section" id="tab-test">
+      <h2>Model Testing</h2>
+      <p class="lead">Evaluate saved models on the held-out test set or a new CSV. Overlay multiple ROC/PR curves.</p>
+      <div class="panel">
+        <h3>Saved &amp; uploaded models</h3>
+        <div class="flex" style="margin-bottom:8px">
+          <button class="ghost sm" onclick="loadModels()">Refresh</button>
+          <label class="ghost sm" style="cursor:pointer;background:#eef3f9;color:var(--brand-d);padding:5px 10px;border-radius:7px;font-weight:600">
+            Upload .pkl <input type="file" id="pklUpload" accept=".pkl" style="display:none"></label>
+        </div>
+        <div class="checklist" id="modelPickList"><span class="muted small">No models yet — train some first.</span></div>
+        <div class="row" style="margin-top:14px">
+          <div><label>Test data source</label>
+            <select id="testSource"><option value="test">Held-out test set</option>
+              <option value="upload">Upload new CSV</option></select></div>
+          <div><label>Threshold</label><input id="testThr" type="number" value="0.5" step="0.05"></div>
+          <div id="testUploadBox" style="display:none"><label>New CSV</label><input type="file" id="testCsv" accept=".csv"></div>
+          <div style="display:flex;align-items:flex-end"><button id="testBtn">Run testing</button></div>
+        </div>
+      </div>
+      <div class="panel" id="testResults" style="display:none">
+        <h3>Results</h3>
+        <div id="testOverlay"></div>
+        <div class="scrollx" style="margin-top:12px"><table id="testMetricsTable"></table></div>
+        <div class="flex" style="margin-top:8px"><button class="ghost sm" onclick="dlTable('testMetricsTable','test_metrics.csv')">Download CSV</button></div>
+        <div id="testPlots" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Single prediction</h3>
+        <p class="hint">Pick a saved model (or upload a model + JSON row) and get a probability for one patient.</p>
+        <div class="row">
+          <div><label>Model</label><select id="predModel"></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="ghost" onclick="buildPredForm()">Load input form</button></div>
+        </div>
+        <div id="predFormWrap" style="margin-top:12px"></div>
+        <details style="margin-top:10px"><summary>…or upload model + JSON row instead</summary>
+          <div class="row" style="margin-top:8px">
+            <div><label>Model (.pkl)</label><input type="file" id="predPkl" accept=".pkl"></div>
+            <div><label>Row (.json)</label><input type="file" id="predJson" accept=".json"></div>
+            <div style="display:flex;align-items:flex-end"><button class="ghost" onclick="predictUpload()">Predict</button></div>
+          </div></details>
+        <div id="predResult" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- ================= SPLINE ================= -->
+    <section class="section" id="tab-spline">
+      <h2>Restricted Cubic Spline</h2>
+      <p class="lead">Log-odds of a binary outcome across a continuous predictor, knots marked.</p>
+      <div id="splineEmpty" class="panel muted">Confirm a dataset first.</div>
+      <div class="panel" id="splineBody" style="display:none">
+        <div class="row">
+          <div><label>Continuous predictor</label><select id="splPred"></select></div>
+          <div><label>Binary outcome</label><select id="splOut"></select></div>
+          <div><label>Knots</label><select id="splKnots"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button id="splBtn">Fit spline</button></div>
+        </div>
+        <div id="splineResult" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <!-- ================= EPI ================= -->
+    <section class="section" id="tab-epi">
+      <h2>Clinical Epidemiology</h2>
+      <p class="lead">2×2 measures, survival analysis, and goodness-of-fit.</p>
+
+      <div class="panel">
+        <h3>Odds ratio / Risk ratio / NNT–NNH (2×2 table)</h3>
+        <table style="width:auto"><tr><th></th><th>Outcome +</th><th>Outcome −</th></tr>
+          <tr><th>Exposed</th><td><input id="ea" type="number" value="20" style="width:90px"></td><td><input id="eb" type="number" value="80" style="width:90px"></td></tr>
+          <tr><th>Unexposed</th><td><input id="ec" type="number" value="10" style="width:90px"></td><td><input id="ed" type="number" value="90" style="width:90px"></td></tr></table>
+        <div class="flex" style="margin-top:10px"><button onclick="runEpi2x2()">Calculate</button></div>
+        <div id="epi2x2Result" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel" id="survPanel">
+        <div id="epiEmpty" class="muted">Confirm a dataset to use survival &amp; calibration tools.</div>
+        <div id="epiBody" style="display:none">
+          <h3>Kaplan–Meier &amp; Cox proportional hazards</h3>
+          <div class="row">
+            <div><label>Time / duration</label><select id="kmTime"></select></div>
+            <div><label>Event (1=event)</label><select id="kmEvent"></select></div>
+            <div><label>Group (KM, optional)</label><select id="kmGroup"><option value="">— none —</option></select></div>
+            <div style="display:flex;align-items:flex-end"><button onclick="runKM()">Kaplan–Meier</button></div>
+          </div>
+          <div id="kmResult" style="margin-top:12px"></div>
+          <div style="margin-top:16px"><label>Cox covariates</label>
+            <select id="coxCov" multiple size="5" style="max-width:340px"></select>
+            <div class="flex" style="margin-top:8px"><button onclick="runCox()">Fit Cox model</button></div></div>
+          <div id="coxResult" style="margin-top:12px"></div>
+
+          <h3 style="margin-top:22px">Hosmer–Lemeshow calibration</h3>
+          <div class="row">
+            <div><label>Saved binary model</label><select id="hlModel"></select></div>
+            <div style="display:flex;align-items:flex-end"><button onclick="runHL()">Run on test set</button></div>
+          </div>
+          <div id="hlResult" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<div id="toast"></div>
+<div class="busy" id="busy">
+  <div class="spinner"></div>
+  <div class="msg" id="busyMsg">Working…</div>
+  <div class="pbar" id="busyBarWrap" style="display:none"><i id="busyBar"></i></div>
+  <div class="sub2" id="busySub"></div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
