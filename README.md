@@ -1,4 +1,4 @@
-# ClinTAB-ML-Foundry
+# ClinTAB-ML
 
 A single-page **clinical machine-learning web app** for tabular registry data
 (TQIP, NSQIP, and any CSV cohort). It is the nexus for an ML study: upload a
@@ -17,7 +17,7 @@ and returned as a PNG (with PDF / CSV export) — no SVG, no canvas, no Chart.js
 ## Quick start (terminal)
 
 ```bash
-cd ClinTAB-ML-Foundry
+cd ClinTAB-ML
 ./run.sh                 # creates .venv, installs deps, serves http://127.0.0.1:5000
 ```
 
