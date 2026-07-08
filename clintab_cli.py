@@ -167,6 +167,9 @@ def cmd_test(a):
         mdl = joblib.load(store.model_path(name))
         if not isinstance(mdl, dict):
             mdl = {"pipe": mdl, "feat_cols": [c for c in df.columns], "outcome": None, "task": "binary"}
+        if mdl["outcome"] is None or mdl["outcome"] not in df.columns:
+            print(f"  ! {name}: no outcome column recorded for this model, skipping.")
+            continue
         m, c = ml.evaluate(mdl["pipe"], df, mdl["outcome"], mdl["feat_cols"], mdl["task"], a.threshold)
         headers = headers or (["model"] + list(m))
         rows.append({"model": name, **m})
