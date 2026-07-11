@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """clintab_cli.py
 Terminal access to the full ClinTAB-ML-Foundry feature set, built directly on
-the same pure modules the web app uses (ml.py / stats.py / spline.py / epi.py /
-plots.py / store.py). No Flask -- this is the scriptable path for batch runs.
+the same pure modules the web app uses (clintab/ml.py / stats.py / spline.py /
+epi.py / plots.py / store.py). No Flask -- this is the scriptable path for
+batch runs.
 
     python clintab_cli.py summarize --csv Data/sample_clinical.csv
     python clintab_cli.py models
@@ -30,12 +31,12 @@ from sklearn.model_selection import train_test_split
 
 warnings.filterwarnings("ignore")
 
-import store
-import stats
-import ml
-import spline as spline_mod
-import epi
-import plots
+from clintab import store
+from clintab import stats
+from clintab import ml
+from clintab import spline as spline_mod
+from clintab import epi
+from clintab import plots
 
 
 # --------------------------------------------------------------------------
