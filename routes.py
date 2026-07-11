@@ -1,7 +1,8 @@
 """routes.py
 Every HTTP endpoint. This file only does HTTP: parse the request, call into
-ml.py / stats.py / spline.py / epi.py / plots.py for the real work, return JSON
-(or an SSE stream / a file download). No statistics or sklearn logic lives here.
+clintab/ (ml.py / stats.py / spline.py / epi.py / plots.py) for the real work,
+return JSON (or an SSE stream / a file download). No statistics or sklearn
+logic lives here.
 """
 import io
 import json
@@ -15,12 +16,12 @@ from flask import (
     send_from_directory, current_app,
 )
 
-import store
-import stats
-import ml
-import plots
-import spline as spline_mod
-import epi
+from clintab import store
+from clintab import stats
+from clintab import ml
+from clintab import plots
+from clintab import spline as spline_mod
+from clintab import epi
 
 bp = Blueprint("api", __name__)
 

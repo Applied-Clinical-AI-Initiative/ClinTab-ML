@@ -1,7 +1,7 @@
 """app.py
 Creates the Flask app and starts the server. Nothing else lives here -- all
-endpoints are in routes.py and all real work is in ml.py / stats.py / spline.py
-/ epi.py / plots.py.
+endpoints are in routes.py and all real work is in clintab/ (ml.py / stats.py
+/ spline.py / epi.py / plots.py).
 
 Run locally:        python app.py
 Run on a server:    gunicorn -w 1 -k gthread --threads 8 -b 0.0.0.0:5000 "app:create_app()"
@@ -15,7 +15,7 @@ import numpy as np
 from flask import Flask
 from flask.json.provider import DefaultJSONProvider
 
-import store
+from clintab import store
 from routes import bp
 
 
