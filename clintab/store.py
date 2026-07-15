@@ -21,7 +21,7 @@ import os
 import time
 import uuid
 
-BASE = os.path.dirname(os.path.abspath(__file__))
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME = os.path.join(BASE, "runtime")
 SESSIONS = os.path.join(RUNTIME, "sessions")
 EXPORTS = os.path.join(RUNTIME, "exports")

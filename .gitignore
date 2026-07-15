@@ -65,6 +65,10 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# ClinTAB-ML generated data (sessions, exports, trained model pickles)
+/runtime/
+/models/
+
 # Scrapy stuff:
 .scrapy
 
