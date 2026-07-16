@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "ClinTAB-ML: a clinical machine-learning web app for tabular registry data"
+type: software
+authors:
+  - given-names: Dharsan
+    family-names: Ravindran
+    affiliation: University of Toronto
+  - given-names: Aazad
+    family-names: Abbas
+    affiliation: University of Toronto
+  - given-names: Kisaan
+    family-names: Ravindran
+    affiliation: Applied Clinical AI Initiative
+repository-code: "https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML"
+license: MIT
