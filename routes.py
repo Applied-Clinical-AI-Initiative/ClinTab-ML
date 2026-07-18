@@ -398,6 +398,11 @@ def test_models():
             entry["pred_vs_actual_png"] = plots.fig_to_png(plots.pred_vs_actual_plot(
                 coords["pred_vs_actual"]["actual"], coords["pred_vs_actual"]["pred"],
                 title=f"{name}: predicted vs actual"))
+        elif task == "multiclass" and coords.get("roc"):
+            entry["roc_png"] = plots.fig_to_png(plots.roc_overlay(
+                coords["roc"], title=f"{name}: ROC (one-vs-rest)"))
+            entry["pr_png"] = plots.fig_to_png(plots.pr_overlay(
+                coords["pr"], title=f"{name}: PR (one-vs-rest)"))
         out["models"].append(entry)
 
     if roc_series:

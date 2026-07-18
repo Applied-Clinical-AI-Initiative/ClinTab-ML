@@ -176,11 +176,12 @@ Flask session"); everything heavy lives on disk so it survives restarts.
 
 4. **Model Testing** — pick saved pickles (or upload one) and a held-out test
    set or new CSV. Get a metrics table plus matplotlib **ROC, PR, confusion,
-   calibration** (classification) or **residuals, predicted-vs-actual**
-   (regression). Multiple models **overlay** on one ROC / PR chart. Download
-   PNG / CSV. **Single prediction:** pick a model, fill the auto-built input
-   form (or upload a model `.pkl` + a `.json` row) → predicted outcome with
-   probability and a plain-language explanation.
+   calibration** (binary), **one-vs-rest ROC / PR per class** (multiclass), or
+   **residuals, predicted-vs-actual** (regression). Multiple binary models
+   **overlay** on one ROC / PR chart. Download PNG / CSV. **Single
+   prediction:** pick a model, fill the auto-built input form (or upload a
+   model `.pkl` + a `.json` row) → predicted outcome with probability and a
+   plain-language explanation.
 
 5. **Spline** — pick a continuous predictor + binary outcome. Flask fits a
    restricted cubic spline (patsy `cr()` + statsmodels logistic) and plots
@@ -241,10 +242,6 @@ Regressor.
 - [x] PNG / PDF / CSV export. Terminal launch via `run.sh`; gunicorn for server.
 
 ### Known limitations / next steps (good "continue-it-yourself" list)
-- **Multiclass categorical outcomes** train and report Accuracy / Balanced
-  Accuracy / Macro-F1 only — no ROC/PR overlay yet. Binary + continuous are the
-  fully-featured paths. (Extend `ml.multiclass_metrics` + `plots.py` for OvR
-  ROC if you need it.)
 - **Confounding variables** are currently kept as ordinary features and tagged;
   they are not yet given special statistical treatment (e.g. forced-in adjusted
   models). The UI captures them and they ride along in training.

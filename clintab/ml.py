@@ -10,7 +10,9 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder
+from sklearn.preprocessing import (
+    OneHotEncoder, StandardScaler, LabelEncoder, label_binarize,
+)
 from sklearn.model_selection import GridSearchCV, PredefinedSplit
 from sklearn.inspection import permutation_importance
 
@@ -29,7 +31,7 @@ from sklearn.metrics import (
     roc_auc_score, average_precision_score, roc_curve, precision_recall_curve,
     confusion_matrix, f1_score, fbeta_score, brier_score_loss, make_scorer,
     recall_score, precision_score, accuracy_score, balanced_accuracy_score,
-    mean_absolute_error, mean_squared_error, r2_score,
+    mean_absolute_error, mean_squared_error, r2_score, auc,
 )
 from sklearn.calibration import calibration_curve
 
@@ -324,14 +326,36 @@ def regression_metrics(y_true, y_pred):
     return metrics, coords
 
 
-def multiclass_metrics(y_true, y_pred):
+def multiclass_metrics(y_true, y_pred, y_proba=None):
+    """Accuracy/BalancedAccuracy/MacroF1, plus one-vs-rest ROC/PR curve
+    coordinates per class when y_proba (from predict_scores) is given."""
     y_true = np.asarray(y_true)
-    return {
+    metrics = {
         "Accuracy": round(float(accuracy_score(y_true, y_pred)), 4),
         "BalancedAccuracy": round(float(balanced_accuracy_score(y_true, y_pred)), 4),
         "MacroF1": round(float(f1_score(y_true, y_pred, average="macro", zero_division=0)), 4),
         "N": int(len(y_true)),
-    }, {}
+    }
+
+    coords = {}
+    if y_proba is not None:
+        classes = np.unique(y_true)
+        y_bin = label_binarize(y_true, classes=classes)
+        if y_bin.shape[1] == 1:
+            y_bin = np.hstack([1 - y_bin, y_bin])
+        roc_series, pr_series = [], []
+        for i, cls in enumerate(classes):
+            fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
+            prec, rec, _ = precision_recall_curve(y_bin[:, i], y_proba[:, i])
+            roc_series.append({"name": f"class {cls}", "fpr": fpr.tolist(),
+                                "tpr": tpr.tolist(),
+                                "auc": round(float(auc(fpr, tpr)), 4)})
+            pr_series.append({"name": f"class {cls}", "recall": rec.tolist(),
+                               "precision": prec.tolist(),
+                               "ap": round(float(average_precision_score(y_bin[:, i], y_proba[:, i])), 4)})
+        coords = {"roc": roc_series, "pr": pr_series}
+
+    return metrics, coords
 
 
 def evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5):
@@ -347,7 +371,8 @@ def evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5):
         preds = pipe.predict(X)
         return regression_metrics(y, preds)
     preds = pipe.predict(X)
-    return multiclass_metrics(y, preds)
+    proba = predict_scores(pipe, X, task)
+    return multiclass_metrics(y, preds, proba)
 
 
 # ============================================================================
