@@ -20,6 +20,8 @@ release has been tagged yet; everything below is grouped under Unreleased.
   (runs the test suite on every push/PR to `main`, Python 3.10 and 3.12).
 - Statement of Need and Contributing & Support sections in the README.
 - `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CITATION.cff`.
+- ORCID identifiers for all three authors in `CITATION.cff`.
+
 
 ### Fixed
 - `clintab_cli.py`'s `test` command crashed with `KeyError: None` when
@@ -38,5 +40,9 @@ release has been tagged yet; everything below is grouped under Unreleased.
   regardless of where `store.py` lives.
 - `/runtime/` and `/models/` were never excluded from git; added to
   `.gitignore`.
+- CI failed on every push with `ModuleNotFoundError: No module named 'clintab'`,
+  since the bare `pytest` command doesn't add the repo root to `sys.path` the
+  way `python -m pytest` does. Added `pytest.ini` with `pythonpath = .` so
+  `clintab` is importable regardless of how pytest is invoked.
 
 [Unreleased]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/commits/main
