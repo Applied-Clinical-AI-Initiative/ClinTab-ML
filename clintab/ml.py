@@ -137,12 +137,28 @@ def feature_columns(df, outcome, exclude):
     return [c for c in df.columns if c != outcome and c not in exclude]
 
 
-def build_preprocessor(df, feat_cols, scale=True):
+def build_preprocessor(df, feat_cols, coltypes=None, scale=True):
     """ColumnTransformer: impute+scale numerics, impute+one-hot categoricals.
-    object/category dtype -> categorical; otherwise numeric.
+
+    coltypes: optional {col: 'binary'|'categorical'|'continuous'|'date'|...},
+    e.g. from stats.detect_column_types / meta['coltypes']. Columns tagged
+    'binary' or 'categorical' there are one-hot encoded even if their pandas
+    dtype is numeric (integer-coded categoricals like ASA class). Columns not
+    present in coltypes fall back to dtype-based inference: object/category
+    dtype -> categorical, otherwise numeric.
     """
-    num = [c for c in feat_cols if pd.api.types.is_numeric_dtype(df[c])]
-    cat = [c for c in feat_cols if c not in num]
+    coltypes = coltypes or {}
+
+    def _is_categorical(c):
+        t = coltypes.get(c)
+        if t in ("binary", "categorical"):
+            return True
+        if t == "continuous":
+            return False
+        return not pd.api.types.is_numeric_dtype(df[c])
+
+    cat = [c for c in feat_cols if _is_categorical(c)]
+    num = [c for c in feat_cols if c not in cat]
 
     num_steps = [("impute", SimpleImputer(strategy="median"))]
     if scale:
@@ -196,16 +212,18 @@ def make_scoring(metric, task):
 # ============================================================================
 def train_one_model(name, df_train, df_val, outcome, feat_cols, task,
                     param_grid=None, scoring="roc", use_smote=False,
-                    do_grid_search=True):
+                    do_grid_search=True, coltypes=None):
     """Fit one model. Grid search is evaluated on the VALIDATION set only
     (via PredefinedSplit), then the best params are refit on train+val.
+    coltypes: optional {col: type}, passed to build_preprocessor so
+    integer-coded categoricals get one-hot encoded instead of scaled.
     Returns (fitted_pipeline, info_dict).
     """
     cfg = model_catalogue(task)[name]
     estimator = cfg["model"]
     grid = param_grid if param_grid is not None else cfg["params"]
 
-    pre, num, cat = build_preprocessor(df_train, feat_cols)
+    pre, num, cat = build_preprocessor(df_train, feat_cols, coltypes=coltypes)
 
     steps = [("pre", pre)]
     if use_smote and task in ("binary", "multiclass") and HAS_SMOTE:
