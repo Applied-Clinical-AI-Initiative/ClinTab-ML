@@ -34,6 +34,21 @@ def test_build_preprocessor_splits_numeric_and_categorical():
     assert cat == ["sex"]
 
 
+def test_build_preprocessor_without_coltypes_treats_int_column_as_numeric():
+    df = pd.DataFrame({"asa_class": [1, 2, 3, 2, 1], "age": [50, 60, 70, 65, 55]})
+    pre, num, cat = ml.build_preprocessor(df, ["asa_class", "age"])
+    assert set(num) == {"asa_class", "age"}
+    assert cat == []
+
+
+def test_build_preprocessor_with_coltypes_one_hot_encodes_integer_categorical():
+    df = pd.DataFrame({"asa_class": [1, 2, 3, 2, 1], "age": [50, 60, 70, 65, 55]})
+    coltypes = {"asa_class": "categorical", "age": "continuous"}
+    pre, num, cat = ml.build_preprocessor(df, ["asa_class", "age"], coltypes=coltypes)
+    assert num == ["age"]
+    assert cat == ["asa_class"]
+
+
 def test_encode_outcome_binary_and_continuous():
     y_bin, classes = ml.encode_outcome(pd.Series(["yes", "no", "yes"]), "binary")
     assert classes == ["no", "yes"]

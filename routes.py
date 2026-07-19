@@ -282,7 +282,8 @@ def train_stream():
                 pipe, info = ml.train_one_model(
                     name, df_train, df_val, outcome, feat_cols, task,
                     param_grid=grid, scoring=cfg["scoring"],
-                    use_smote=cfg["smote"], do_grid_search=cfg["grid_search"])
+                    use_smote=cfg["smote"], do_grid_search=cfg["grid_search"],
+                    coltypes=meta.get("coltypes", {}))
 
                 vmetrics, vcoords = ml.evaluate(pipe, df_val, outcome, feat_cols,
                                                 task, threshold=cfg["threshold"])

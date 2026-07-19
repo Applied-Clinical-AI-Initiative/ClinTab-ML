@@ -127,7 +127,8 @@ def cmd_train(a):
         print(f"  … {name}")
         pipe, info = ml.train_one_model(name, tr, va, a.outcome, feat_cols, task,
                                         scoring=a.scoring, use_smote=a.smote,
-                                        do_grid_search=not a.no_grid)
+                                        do_grid_search=not a.no_grid,
+                                        coltypes=coltypes)
         vmetrics, _ = ml.evaluate(pipe, va, a.outcome, feat_cols, task, threshold=a.threshold)
         ts = store.timestamp()
         base = f"{name}_{a.outcome}_{ts}".replace(" ", "_")
