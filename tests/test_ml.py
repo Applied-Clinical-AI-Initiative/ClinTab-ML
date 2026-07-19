@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from clintab import ml
 
@@ -83,6 +84,56 @@ def test_regression_metrics_basic():
     assert metrics["MAE"] == 0.0
     assert metrics["RMSE"] == 0.0
     assert metrics["R2"] == 1.0
+
+
+def test_multiclass_metrics_without_proba_has_no_curve_coords():
+    y_true = np.array([0, 1, 2, 0, 1, 2])
+    y_pred = np.array([0, 1, 2, 0, 2, 2])
+    metrics, coords = ml.multiclass_metrics(y_true, y_pred)
+    assert metrics["Accuracy"] == pytest.approx(5 / 6, abs=1e-4)
+    assert coords == {}
+
+
+def test_multiclass_metrics_with_proba_returns_one_vs_rest_roc_pr():
+    y_true = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+    y_pred = np.array([0, 1, 2, 0, 1, 2, 0, 1, 2])
+    # perfectly confident, correct probabilities for 3 classes
+    y_proba = np.array([
+        [1, 0, 0], [0, 1, 0], [0, 0, 1],
+        [1, 0, 0], [0, 1, 0], [0, 0, 1],
+        [1, 0, 0], [0, 1, 0], [0, 0, 1],
+    ], dtype=float)
+
+    metrics, coords = ml.multiclass_metrics(y_true, y_pred, y_proba)
+    assert set(coords.keys()) == {"roc", "pr"}
+    assert len(coords["roc"]) == 3
+    assert len(coords["pr"]) == 3
+    for series in coords["roc"]:
+        assert series["auc"] == 1.0
+    for series in coords["pr"]:
+        assert series["ap"] == 1.0
+
+
+def test_evaluate_multiclass_returns_roc_pr_coords():
+    rng = np.random.RandomState(0)
+    n = 180
+    age = rng.normal(60, 10, size=n)
+    grp = rng.choice([0, 1, 2], size=n)
+    # outcome mostly matches group, with some noise
+    outcome = np.where(rng.uniform(size=n) < 0.85, grp, rng.choice([0, 1, 2], size=n))
+    df = pd.DataFrame({"age": age, "grp": grp, "outcome": outcome})
+    train, val = df.iloc[:120], df.iloc[120:]
+    feat_cols = ["age", "grp"]
+
+    pipe, info = ml.train_one_model(
+        "RandomForest", train, val, "outcome", feat_cols, "multiclass",
+        do_grid_search=False)
+    assert info["task"] == "multiclass"
+
+    metrics, coords = ml.evaluate(pipe, val, "outcome", feat_cols, "multiclass")
+    assert "MacroF1" in metrics
+    assert set(coords.keys()) == {"roc", "pr"}
+    assert len(coords["roc"]) == len(coords["pr"])
 
 
 def test_predict_single_binary_returns_probability():
