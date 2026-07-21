@@ -22,6 +22,7 @@ from clintab import ml
 from clintab import plots
 from clintab import spline as spline_mod
 from clintab import epi
+from clintab import analysis_log
 
 bp = Blueprint("api", __name__)
 
@@ -81,6 +82,8 @@ def upload():
     }
     store.save_meta(sid, meta)
     session["sid"] = sid
+    analysis_log.log_action(sid, "upload", inputs={"filename": f.filename},
+                            outputs={"n_rows": meta["n_rows"], "n_cols": meta["n_cols"]})
 
     preview = df.head(20).where(pd.notnull(df.head(20)), None).to_dict(orient="records")
     return jsonify({
@@ -164,6 +167,9 @@ def confirm():
         "smote_hint": smote_hint,
     })
     store.save_meta(sid, meta)
+    analysis_log.log_action(sid, "confirm", inputs={"method": method, "ratios": r,
+                            "stratify_col": stratify_col, "smote_pref": smote_pref},
+                            outputs={"n_train": len(train), "n_val": len(val), "n_test": len(test)})
     return jsonify({"ok": True, "n_train": len(train), "n_val": len(val),
                     "n_test": len(test), "method": method, "smote_hint": smote_hint})
 
@@ -316,6 +322,12 @@ def train_stream():
                     imp["feature"], imp["importance"], f"{name}: feature importance"))
 
                 results.append({"model": name, "metrics": vmetrics})
+                analysis_log.log_action(sid, "train_model",
+                                        inputs={"model": name, "outcome": outcome,
+                                                "scoring": cfg["scoring"],
+                                                "smote": info["smote"],
+                                                "cv_folds": info["cv_folds"]},
+                                        outputs={"saved_as": base, "metrics": vmetrics})
                 yield sse({"event": "model_done", "model": name,
                            "saved_as": base, "metrics": vmetrics,
                            "best_params": info["best_params"],
@@ -366,6 +378,7 @@ def test_models():
         float((request.json or {}).get("threshold", 0.5))
 
     # choose dataframe
+    sid = None
     if source == "upload" and "file" in request.files:
         df = pd.read_csv(request.files["file"])
     else:
@@ -387,6 +400,9 @@ def test_models():
             feat_cols = [c for c in df.columns if c != outcome]
         out["task"] = task
         metrics, coords = ml.evaluate(pipe, df, outcome, feat_cols, task, threshold)
+        if sid:
+            analysis_log.log_action(sid, "test_model", inputs={"model": name, "source": source},
+                                    outputs={"metrics": metrics})
         entry = {"name": name, "metrics": metrics, "coords": coords}
         if task == "binary":
             roc_series.append({"name": name, **coords["roc"]})
@@ -466,6 +482,10 @@ def spline_fit():
         res["x"], res["logodds"], res["lower"], res["upper"], res["knots"],
         predictor=res["predictor"],
         title=f"RCS: {res['outcome']} ~ {res['predictor']} ({res['n_knots']} knots)"))
+    analysis_log.log_action(sid, "fit_spline",
+                            inputs={"predictor": res["predictor"], "outcome": res["outcome"],
+                                    "n_knots": res["n_knots"]},
+                            outputs={"aic": res["aic"], "n": res["n"]})
     return jsonify(res)
 
 
@@ -496,6 +516,11 @@ def epi_km():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
     res["png"] = plots.fig_to_png(plots.km_plot(res["curves"]))
+    analysis_log.log_action(sid, "epi_km",
+                            inputs={"time": b["time"], "event": b["event"],
+                                    "group": b.get("group")},
+                            outputs={"n_curves": len(res["curves"]),
+                                     "logrank": res["logrank"]})
     return jsonify(res)
 
 
@@ -507,9 +532,14 @@ def epi_cox():
     b = request.get_json(force=True)
     df = pd.read_csv(store.session_path(sid, "full.csv"))
     try:
-        return jsonify(epi.cox_ph(df, b["time"], b["event"], b["covariates"]))
+        res = epi.cox_ph(df, b["time"], b["event"], b["covariates"])
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+    analysis_log.log_action(sid, "epi_cox",
+                            inputs={"time": b["time"], "event": b["event"],
+                                    "covariates": b["covariates"]},
+                            outputs={"concordance": res["concordance"], "n": res["n"]})
+    return jsonify(res)
 
 
 @bp.route("/api/epi/hl", methods=["POST"])
@@ -532,6 +562,9 @@ def epi_hl():
     res = epi.hosmer_lemeshow(np.asarray(y)[mask], scores)
     res["png"] = plots.fig_to_png(plots.calibration_hl_plot(
         res["mean_pred"], res["observed_rate"]))
+    analysis_log.log_action(sid, "epi_hl", inputs={"model": b["model"]},
+                            outputs={"hl_statistic": res["hl_statistic"],
+                                     "p_value": res["p_value"]})
     return jsonify(res)
 
 
