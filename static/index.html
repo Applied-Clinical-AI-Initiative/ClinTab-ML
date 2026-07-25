@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ClinTAB-ML-Foundry</title>
+<title>ClinTAB-ML</title>
+<link rel="icon" type="image/png" href="/static/assets/favicon.png">
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <style>
   :root{
@@ -17,9 +18,16 @@
   a{color:var(--brand)}
   .app{display:flex;min-height:100vh}
   /* sidebar */
-  .side{width:230px;background:#16283d;color:#cdd9e6;flex-shrink:0;padding:18px 0}
-  .side h1{font-size:15px;margin:0 18px 4px;color:#fff;letter-spacing:.3px}
+  .side{width:230px;background:#16283d;color:#cdd9e6;flex-shrink:0;padding:18px 0;
+    display:flex;flex-direction:column;min-height:100vh}
+  .brand{display:flex;align-items:center;gap:8px;margin:0 18px 4px}
+  .brand-icon{width:26px;height:26px;border-radius:50%;flex-shrink:0}
+  .side h1{font-size:15px;margin:0;color:#fff;letter-spacing:.3px}
   .side .sub{font-size:11px;color:#7f93aa;margin:0 18px 18px}
+  .side-footer{margin-top:auto;padding:14px 18px 4px;display:flex;align-items:center;gap:8px;
+    border-top:1px solid #223752}
+  .side-footer-icon{width:18px;height:18px;border-radius:50%;flex-shrink:0}
+  .side-footer span{font-size:10px;color:#7f93aa;letter-spacing:.2px}
   .nav a{display:flex;gap:9px;align-items:center;padding:10px 18px;color:#cdd9e6;
         text-decoration:none;cursor:pointer;border-left:3px solid transparent;font-size:13px}
   .nav a:hover{background:#1d3550}
@@ -27,6 +35,20 @@
   .nav .step{width:20px;height:20px;border-radius:50%;background:#27405d;display:inline-flex;
         align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
   .nav a.done .step{background:var(--ok);color:#fff}
+  .ds-list{padding:0 12px}
+  .ds-item{display:flex;align-items:center;justify-content:space-between;gap:6px;
+    padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:#cdd9e6}
+  .ds-item:hover{background:#1d3550}
+  .ds-item.active{background:#1d3550;color:#fff;font-weight:600}
+  .ds-item .ds-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ds-item .ds-x{color:#7f93aa;font-weight:700;padding:0 6px;border-radius:4px;flex-shrink:0}
+  .ds-item .ds-x:hover{color:#fff;background:#c0392b}
+  .ds-empty{font-size:11px;color:#7f93aa;padding:4px 8px}
+  .ds-heading{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#7f93aa;
+    margin:0 0 6px;padding:0 12px}
+  .ds-clear{display:block;margin:10px 12px 0;font-size:11px;color:#c0789a;cursor:pointer}
+  .ds-clear:hover{color:#fff}
+  .acai-lockup{height:44px;margin:2px 0 20px;display:block}
   /* main */
   main{flex:1;padding:26px 34px;max-width:1180px}
   h2{font-size:20px;margin:0 0 4px}
@@ -66,6 +88,32 @@
   .pill.categorical{background:#fdf0e3;color:#a86511}
   .pill.continuous{background:#e8f6ee;color:#23774a}
   .pill.date{background:#efeaf7;color:#6b4fa0}
+  .pill.found{background:#e8f6ee;color:#23774a}
+  .pill.not_found{background:#fdeceb;color:#a83a2c}
+  .pill.not_applicable{background:#eef1f4;color:#5b6673}
+  .pill.manual_review{background:#fdf0e3;color:#a86511}
+  .disclaimer{border-left:3px solid var(--warn);padding:8px 12px;background:#fdf6ec;
+    border-radius:0 6px 6px 0;font-size:12px;color:var(--ink)}
+  .paper{background:#fff;border:1px solid var(--line);border-radius:3px;
+    box-shadow:0 1px 4px rgba(20,30,45,.08);padding:30px 38px;max-width:680px}
+  .paper h4{font:600 11px/1 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 16px}
+  .paper p{margin:0;font-family:Georgia,'Times New Roman',serif;font-size:15px;
+    line-height:1.75;color:#242a33;text-align:justify}
+  .paper p:empty::before{content:"Nothing logged yet — upload, train, or run an analysis first.";
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--muted);
+    font-style:italic;font-size:13px}
+  .paper p[contenteditable="true"]{outline:2px dashed var(--brand);outline-offset:8px;
+    cursor:text;border-radius:3px}
+  .modal-overlay{position:fixed;inset:0;background:rgba(15,25,40,.55);display:none;
+    align-items:flex-start;justify-content:center;z-index:70;overflow:auto;padding:40px 20px}
+  .modal-overlay.show{display:flex}
+  .modal-overlay.center{align-items:center}
+  .modal-overlay .paper{max-width:760px;width:100%;box-shadow:0 12px 44px rgba(0,0,0,.35)}
+  .modal-overlay .panel{box-shadow:0 12px 44px rgba(0,0,0,.35)}
+  .train-done-icon{width:48px;height:48px;border-radius:50%;background:#e8f6ee;color:var(--ok);
+    font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
+  .train-done-icon.err{background:#fdeceb;color:var(--err)}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
   .card{background:#f7fafd;border:1px solid var(--line);border-radius:9px;padding:14px}
   .card .big{font-size:24px;font-weight:700;color:var(--brand-d)}
@@ -86,6 +134,21 @@
         background:#f7fafd;border:1px solid var(--line);border-radius:6px;padding:7px 9px;cursor:pointer}
   details{border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-top:8px;background:#fafcff}
   summary{cursor:pointer;font-weight:600;font-size:12px;color:var(--brand-d)}
+  .accordion{display:flex;flex-direction:column;gap:8px}
+  .accordion .acc-item{border:1px solid var(--line);border-radius:8px;background:#fafcff;
+    padding:0;margin-top:0;overflow:hidden}
+  .accordion .acc-item summary{list-style:none;padding:13px 16px;display:flex;align-items:center;
+    gap:12px;font-weight:600;font-size:14px;color:var(--ink)}
+  .accordion .acc-item summary::-webkit-details-marker{display:none}
+  .accordion .acc-item summary::after{content:"+";margin-left:auto;font-size:18px;
+    color:var(--muted);font-weight:400}
+  .accordion .acc-item[open] summary::after{content:"\2212"}
+  .accordion .acc-item[open] summary{border-bottom:1px solid var(--line)}
+  .acc-num{width:24px;height:24px;border-radius:50%;background:var(--chip);color:var(--brand-d);
+    display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
+    flex-shrink:0}
+  .accordion .acc-item p{margin:0;padding:14px 16px 16px 52px;color:var(--muted);font-size:13px;
+    line-height:1.65}
   .err-text{color:var(--err);font-size:12px}
   .ok-text{color:var(--ok);font-weight:600}
   .small{font-size:12px}
@@ -105,22 +168,111 @@
 <body>
 <div class="app">
   <aside class="side">
-    <h1>ClinTAB-ML-Foundry</h1>
+    <div class="brand">
+      <img src="/static/assets/acai-icon.png" alt="" class="brand-icon">
+      <h1>ClinTAB-ML</h1>
+    </div>
     <div class="sub">Clinical ML for tabular registries</div>
     <nav class="nav" id="nav">
-      <a data-tab="upload" class="active"><span class="step">1</span> Data Upload</a>
+      <a data-tab="overview" class="active" style="margin-bottom:8px">Overview</a>
+      <a data-tab="upload"><span class="step">1</span> Data Upload</a>
       <a data-tab="summary"><span class="step">2</span> Data Summary</a>
       <a data-tab="train"><span class="step">3</span> Model Training</a>
       <a data-tab="test"><span class="step">4</span> Model Testing</a>
       <a data-tab="spline"><span class="step">5</span> Spline</a>
       <a data-tab="epi"><span class="step">6</span> Clinical Epi</a>
+      <a data-tab="reports"><span class="step">7</span> Reports</a>
     </nav>
     <div class="sub" style="margin-top:24px" id="sessionTag">No dataset loaded</div>
+    <div style="margin-top:16px">
+      <div class="ds-heading">Datasets</div>
+      <div class="ds-list" id="datasetList"></div>
+      <a class="ds-clear" id="clearAllBtn">Clear all data</a>
+    </div>
+    <div class="side-footer">
+      <img src="/static/assets/acai-icon.png" alt="" class="side-footer-icon">
+      <span>Applied Clinical AI Institute</span>
+    </div>
   </aside>
 
   <main>
+    <!-- ================= OVERVIEW ================= -->
+    <section class="section active" id="tab-overview">
+      <h2>ClinTAB-ML</h2>
+      <p class="lead">A clinical machine-learning workbench for tabular registry data &mdash; upload a
+        cohort, profile it, train and compare models, and get the diagnostics and reporting clinical
+        prediction-model work actually requires.</p>
+
+      <div class="panel">
+        <h3>Description</h3>
+        <p>ClinTAB-ML takes a research team from a raw CSV (TQIP, NSQIP, or any tabular cohort)
+          through column profiling, training and tuning across 15 algorithms, full diagnostic evaluation,
+          restricted cubic splines, and the standard clinical-epidemiology calculators, all running
+          on your own machine, so patient-derived data never has to leave it.</p>
+        <p>It exists because clinical researchers usually stitch an ML study together from disconnected
+          tools: a notebook for profiling, hand-written scikit-learn code for models, an online
+          calculator for odds ratios, a separate package for survival analysis. Each hand-off is
+          a place where the statistical conventions clinical work depends on (leakage-free validation,
+          calibration, corrections for zero cells) can quietly get skipped. This app builds those
+          conventions in by default.</p>
+      </div>
+
+      <div class="panel">
+        <h3>Process</h3>
+        <div class="accordion">
+          <details class="acc-item">
+            <summary><span class="acc-num">1</span> Data Upload</summary>
+            <p>Drop in a CSV and the app immediately profiles every column &mdash; binary, categorical,
+              continuous, or date &mdash; flags anything with heavy missing data, and lets you decide
+              column by column whether to keep, fill, or drop it. Set your train / validation / test
+              split, random or stratified, and lock it in with one click.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">2</span> Data Summary</summary>
+            <p>Once the dataset is confirmed, every variable gets a full descriptive breakdown
+              automatically &mdash; means, medians, spread, and missingness for continuous variables;
+              category counts and percentages for everything else. No extra clicks, it's just there.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">3</span> Model Training</summary>
+            <p>Pick an outcome and the model list narrows to whichever of the 15 actually make sense for
+              it &mdash; classifiers for binary or categorical outcomes, regressors for continuous ones.
+              Hyperparameters get tuned against a genuinely held-out validation set (or k-fold CV, your
+              call), and you watch it happen live instead of staring at a blank terminal.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">4</span> Model Testing</summary>
+            <p>Run any saved model against the test set or a brand-new file. ROC, precision-recall,
+              confusion matrices, calibration plots &mdash; all rendered instantly, with multiple models
+              overlaid on the same chart so comparing them is a glance, not a spreadsheet.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">5</span> Spline</summary>
+            <p>Not every predictor behaves linearly. Fit a restricted cubic spline against a continuous
+              variable and see the actual shape of its relationship with the outcome, knots and
+              confidence band included.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">6</span> Clinical Epi</summary>
+            <p>The calculators every clinical paper eventually needs: odds ratios and risk ratios from a
+              2&times;2 table, Kaplan&ndash;Meier survival curves, Cox regression, Hosmer&ndash;Lemeshow
+              calibration &mdash; the kind of thing that usually means switching between three different
+              tools.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">7</span> Reports</summary>
+            <p>Everything you just did gets quietly logged in the background. This tab turns that log
+              into a draft methods paragraph and checks it against the TRIPOD+AI reporting checklist, so
+              you know what's already covered and what you still need to write up yourself.</p>
+          </details>
+        </div>
+      </div>
+
+      <button onclick="goToUpload()">Get started &rarr;</button>
+    </section>
+
     <!-- ================= UPLOAD ================= -->
-    <section class="section active" id="tab-upload">
+    <section class="section" id="tab-upload">
       <h2>Data Upload</h2>
       <p class="lead">Drop a CSV. Columns are auto-typed; override anything, set the split, then confirm.</p>
 
@@ -181,6 +333,7 @@
         <div class="panel"><h3>Binary &amp; categorical variables</h3>
           <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('catTable','categorical_summary.csv')">Download CSV</button></div>
           <div class="scroll scrollx"><table id="catTable"></table></div></div>
+        <button onclick="goToTrain()">Continue to Model Training &rarr;</button>
       </div>
     </section>
 
@@ -245,6 +398,7 @@
           <button class="ghost sm" onclick="loadModels()">Refresh</button>
           <label class="ghost sm" style="cursor:pointer;background:#eef3f9;color:var(--brand-d);padding:5px 10px;border-radius:7px;font-weight:600">
             Upload .pkl <input type="file" id="pklUpload" accept=".pkl" style="display:none"></label>
+          <button class="sm" id="deleteSelectedBtn" style="display:none;background:var(--err)" onclick="confirmDeleteSelected()">Delete selected</button>
         </div>
         <div class="checklist" id="modelPickList"><span class="muted small">No models yet — train some first.</span></div>
         <div class="row" style="margin-top:14px">
@@ -337,6 +491,33 @@
         </div>
       </div>
     </section>
+
+    <!-- ================= REPORTS ================= -->
+    <section class="section" id="tab-reports">
+      <h2>Reports</h2>
+      <p class="lead">Assembled from everything logged during this session &mdash; every upload, split, model trained, and calculation run.</p>
+      <div id="reportsEmpty" class="panel muted">Confirm a dataset first.</div>
+      <div id="reportsBody" style="display:none">
+        <div class="panel">
+          <h3>Methods text</h3>
+          <p class="hint">Deterministically assembled from this session's logged actions &mdash; not AI-generated, and not a substitute for your own review. Edit before pasting into a manuscript.</p>
+          <div class="flex" style="margin-bottom:8px">
+            <button class="ghost sm" onclick="loadMethodsText()">Refresh</button>
+            <button class="ghost sm" onclick="copyMethodsText()">Copy</button>
+            <button class="ghost sm" id="editMethodsBtn" onclick="toggleEditMethods()">Edit</button>
+            <button class="ghost sm" onclick="expandMethods()">Expand</button>
+          </div>
+          <div id="methodsPaperSlot"><div class="paper" id="methodsPaper"><h4>Methods</h4><p id="methodsTextArea"></p></div></div>
+        </div>
+        <div class="panel">
+          <h3>TRIPOD+AI reporting coverage</h3>
+          <div id="tripodDisclaimer" class="disclaimer"></div>
+          <div class="flex" style="margin:10px 0"><button class="ghost sm" onclick="loadTripodReport()">Refresh</button></div>
+          <div class="cards" id="tripodSummary" style="margin-bottom:14px"></div>
+          <div class="scroll"><table id="tripodTable"></table></div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 <div id="toast"></div>
@@ -345,6 +526,46 @@
   <div class="msg" id="busyMsg">Working…</div>
   <div class="pbar" id="busyBarWrap" style="display:none"><i id="busyBar"></i></div>
   <div class="sub2" id="busySub"></div>
+</div>
+<div class="modal-overlay" id="methodsModal" onclick="if(event.target===this) closeMethodsModal()">
+  <div style="max-width:760px;width:100%">
+    <div class="flex" style="justify-content:flex-end;margin-bottom:8px">
+      <button class="ghost sm" onclick="closeMethodsModal()">Close</button>
+    </div>
+    <div id="methodsModalSlot"></div>
+  </div>
+</div>
+<div class="modal-overlay center" id="trainWarnModal">
+  <div class="panel" style="max-width:420px;width:100%;margin:0">
+    <h3 style="margin-top:0">Large dataset</h3>
+    <p class="muted" id="trainWarnMsg" style="margin:0 0 20px"></p>
+    <div class="flex" style="justify-content:flex-end">
+      <button class="ghost" id="trainWarnCancel">Cancel</button>
+      <button id="trainWarnProceed">Proceed with training</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay center" id="trainDoneModal">
+  <div class="panel" style="max-width:420px;width:100%;margin:0;text-align:center">
+    <div class="train-done-icon" id="trainDoneIcon">&check;</div>
+    <h3 style="margin:0 0 6px" id="trainDoneTitle">Training complete</h3>
+    <p class="muted" id="trainDoneMsg" style="margin:0 0 20px"></p>
+    <div class="flex" style="justify-content:center">
+      <button class="ghost" id="trainDoneRedo">Redo training</button>
+      <button id="trainDoneTest">Go to Model Testing</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay center" id="confirmModal">
+  <div class="panel" style="max-width:420px;width:100%;margin:0;text-align:center">
+    <div class="train-done-icon err">!</div>
+    <h3 style="margin:0 0 6px" id="confirmTitle">Are you sure?</h3>
+    <p class="muted" id="confirmMsg" style="margin:0 0 20px"></p>
+    <div class="flex" style="justify-content:center">
+      <button class="ghost" id="confirmCancel">Cancel</button>
+      <button id="confirmOk" style="background:var(--err)">Delete</button>
+    </div>
+  </div>
 </div>
 
 <script src="/static/app.js"></script>

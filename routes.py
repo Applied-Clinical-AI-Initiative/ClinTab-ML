@@ -6,6 +6,7 @@ logic lives here.
 """
 import io
 import json
+import math
 import re
 
 import joblib
@@ -23,6 +24,8 @@ from clintab import plots
 from clintab import spline as spline_mod
 from clintab import epi
 from clintab import analysis_log
+from clintab import methods_text
+from clintab import tripod_report
 
 bp = Blueprint("api", __name__)
 
@@ -41,6 +44,27 @@ def require_session():
 
 def _safe(name):
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name))[:60]
+
+
+def _sanitize(o):
+    """Recursively make a payload strict-JSON safe: NaN/Infinity -> null, and
+    numpy scalars/arrays -> plain Python. Browsers' JSON.parse rejects the NaN
+    and Infinity tokens that Python's json module emits by default (e.g. from
+    a metric that's undefined for a degenerate train/val split)."""
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, np.floating):
+        f = float(o)
+        return f if math.isfinite(f) else None
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.ndarray):
+        return _sanitize(o.tolist())
+    if isinstance(o, dict):
+        return {k: _sanitize(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_sanitize(v) for v in o]
+    return o
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +221,39 @@ def session_info():
     return jsonify({"active": True, "meta": store.load_meta(sid)})
 
 
+@bp.route("/api/sessions")
+def list_sessions():
+    sessions = sorted(store.list_sessions(), key=lambda m: m.get("updated") or 0, reverse=True)
+    out = [{"session_id": m["session_id"], "filename": m.get("filename"),
+            "n_rows": m.get("n_rows"), "stage": m.get("stage")} for m in sessions]
+    return jsonify({"sessions": out, "active": current_sid()})
+
+
+@bp.route("/api/sessions/<sid>/activate", methods=["POST"])
+def activate_session(sid):
+    if not store.session_exists(sid):
+        return jsonify({"error": "Dataset not found."}), 404
+    session["sid"] = sid
+    return jsonify({"ok": True, "meta": store.load_meta(sid)})
+
+
+@bp.route("/api/sessions/<sid>", methods=["DELETE"])
+def delete_session_route(sid):
+    if not store.session_exists(sid):
+        return jsonify({"error": "Dataset not found."}), 404
+    store.delete_session(sid)
+    if current_sid() == sid:
+        session.pop("sid", None)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/sessions", methods=["DELETE"])
+def clear_all_sessions():
+    store.delete_all_sessions()
+    session.pop("sid", None)
+    return jsonify({"ok": True})
+
+
 # ===========================================================================
 # 3. MODEL TRAINING
 # ===========================================================================
@@ -215,6 +272,7 @@ def train_columns():
         "default_grids_binary": ml.default_grids("binary"),
         "default_grids_continuous": ml.default_grids("continuous"),
         "smote_available": ml.HAS_SMOTE,
+        "n_train": meta.get("n_train"),
     })
 
 
@@ -275,7 +333,7 @@ def train_stream():
     feat_cols = ml.feature_columns(df_train, outcome, exclude)
 
     def sse(obj):
-        return f"data: {json.dumps(obj)}\n\n"
+        return f"data: {json.dumps(_sanitize(obj))}\n\n"
 
     def generate():
         models = cfg["models"]
@@ -359,6 +417,15 @@ def model_upload():
     name = _safe(f.filename.rsplit(".", 1)[0]) + "_uploaded"
     f.save(store.model_path(name))
     return jsonify({"ok": True, "name": name})
+
+
+@bp.route("/api/models/<name>", methods=["DELETE"])
+def delete_model(name):
+    name = _safe(name)
+    if not store.model_exists(name):
+        return jsonify({"error": "Model not found."}), 404
+    store.delete_model(name)
+    return jsonify({"ok": True})
 
 
 def _load_model(name):
@@ -604,3 +671,22 @@ def render_pdf():
     return send_file(io.BytesIO(pdf), mimetype="application/pdf",
                      as_attachment=True,
                      download_name=f"{_safe(b.get('name', b['kind']))}.pdf")
+
+
+# ===========================================================================
+# 8. Reports (methods text + TRIPOD+AI coverage), from the analysis log
+# ===========================================================================
+@bp.route("/api/report/methods")
+def report_methods():
+    sid = require_session()
+    if not sid:
+        return jsonify({"error": "No active session."}), 400
+    return jsonify({"text": methods_text.generate_methods_text(sid)})
+
+
+@bp.route("/api/report/tripod")
+def report_tripod():
+    sid = require_session()
+    if not sid:
+        return jsonify({"error": "No active session."}), 400
+    return jsonify(tripod_report.generate_tripod_report(sid))
