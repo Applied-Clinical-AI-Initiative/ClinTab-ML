@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """clintab_cli.py
-Terminal access to the full ClinTAB-ML-Foundry feature set, built directly on
+Terminal access to the full ClinTAB-ML feature set, built directly on
 the same pure modules the web app uses (clintab/ml.py / stats.py / spline.py /
 epi.py / plots.py / store.py). No Flask -- this is the scriptable path for
 batch runs.
@@ -229,7 +229,7 @@ def cmd_epi(a):
 # --------------------------------------------------------------------------
 def build_parser():
     p = argparse.ArgumentParser(prog="clintab_cli",
-                                description="ClinTAB-ML-Foundry terminal interface.")
+                                description="ClinTAB-ML terminal interface.")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("summarize", help="profile + descriptive stats for a CSV")

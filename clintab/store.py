@@ -4,7 +4,7 @@ sklearn -- just paths and JSON. Keeps the data-saving clean and in one place.
 
 Layout (all created automatically on first use):
 
-    ClinTAB-ML-Foundry/
+    ClinTAB-ML/
       runtime/
         sessions/<session_id>/
             raw.csv      # exactly what the user uploaded
@@ -18,6 +18,7 @@ Layout (all created automatically on first use):
 """
 import json
 import os
+import shutil
 import time
 import uuid
 
@@ -66,12 +67,44 @@ def session_exists(session_id):
     return bool(session_id) and os.path.exists(session_path(session_id, "meta.json"))
 
 
+def list_sessions():
+    ensure_dirs()
+    out = []
+    for sid in os.listdir(SESSIONS):
+        meta = load_meta(sid)
+        if meta:
+            out.append({"session_id": sid, **meta})
+    return out
+
+
+def delete_session(session_id):
+    d = session_dir(session_id)
+    if os.path.exists(d):
+        shutil.rmtree(d)
+
+
+def delete_all_sessions():
+    ensure_dirs()
+    for sid in os.listdir(SESSIONS):
+        delete_session(sid)
+
+
 def model_path(name):
     return os.path.join(MODELS, name + ".pkl")
 
 
 def model_meta_path(name):
     return os.path.join(MODELS, name + ".meta.json")
+
+
+def model_exists(name):
+    return bool(name) and os.path.exists(model_path(name))
+
+
+def delete_model(name):
+    for p in (model_path(name), model_meta_path(name)):
+        if os.path.exists(p):
+            os.remove(p)
 
 
 def list_models():

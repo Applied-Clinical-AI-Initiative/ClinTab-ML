@@ -1,4 +1,4 @@
-/* ClinTAB-ML-Foundry front end.
+/* ClinTAB-ML front end.
    Vanilla JS only: tab nav, fetch calls, table/plot rendering. PapaParse is
    used solely for the instant in-browser preview; the raw CSV still goes to
    Flask, which does all real parsing, stats and ML. */
@@ -31,18 +31,28 @@ function pill(t) { return `<span class="pill ${t}">${t}</span>`; }
 function num(v) { return (v === null || v === undefined || v === "") ? "" : v; }
 
 // ---------- tab navigation ----------
+function refreshTab(tab) {
+  if (tab === "summary") loadSummary();
+  if (tab === "train") initTrain();
+  if (tab === "test") loadModels();
+  if (tab === "spline") initSpline();
+  if (tab === "epi") initEpi();
+  if (tab === "reports") initReports();
+}
 $("nav").addEventListener("click", (e) => {
   const a = e.target.closest("a"); if (!a) return;
   document.querySelectorAll(".nav a").forEach(x => x.classList.remove("active"));
   a.classList.add("active");
   document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
   $("tab-" + a.dataset.tab).classList.add("active");
-  if (a.dataset.tab === "summary") loadSummary();
-  if (a.dataset.tab === "train") initTrain();
-  if (a.dataset.tab === "test") { loadModels(); }
-  if (a.dataset.tab === "spline") initSpline();
-  if (a.dataset.tab === "epi") initEpi();
+  window.scrollTo(0, 0);
+  refreshTab(a.dataset.tab);
 });
+function goToUpload() { document.querySelector('[data-tab="upload"]').click(); }
+function goToTrain() {
+  document.querySelector('[data-tab="summary"]').classList.add("done");
+  document.querySelector('[data-tab="train"]').click();
+}
 
 // =====================================================================
 // 1. UPLOAD
@@ -92,6 +102,7 @@ function handleFile(file) {
     $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${d.filename}</b><br>${d.n_rows} rows`;
     renderTypeTable(d.columns); buildStratOptions(d.columns);
     $("typePanel").style.display = $("splitPanel").style.display = "block";
+    loadDatasetList();
     toast("Loaded · columns detected.", "ok");
   };
   xhr.onerror = () => {
@@ -170,6 +181,7 @@ $("confirmBtn").addEventListener("click", async () => {
   if (d.smote_hint && d.smote_hint.suggest_smote)
     toast(`Minority class ${(d.smote_hint.minority_fraction*100).toFixed(1)}% — SMOTE recommended.`, "");
   toast("Dataset confirmed and saved.", "ok");
+  document.querySelector('[data-tab="summary"]').click();
 });
 
 // =====================================================================
@@ -259,11 +271,63 @@ function onOutcomeChange() {
 }
 function toggleModels(on) { document.querySelectorAll(".mdl").forEach(c => c.checked = on); }
 
+const LARGE_DATASET_ROWS = 50000;
+function confirmLargeDataset(nRows) {
+  return new Promise(resolve => {
+    const modal = $("trainWarnModal");
+    $("trainWarnMsg").textContent =
+      `Your training set has ${nRows.toLocaleString()} rows. Grid search across multiple models on ` +
+      `a dataset this size can take a long time to finish on a local machine. You can proceed and let ` +
+      `it run, or cancel and narrow down the models or rows first.`;
+    modal.classList.add("show");
+    const finish = (v) => {
+      modal.classList.remove("show");
+      $("trainWarnProceed").removeEventListener("click", onProceed);
+      $("trainWarnCancel").removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      resolve(v);
+    };
+    const onProceed = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (e) => { if (e.target === modal) finish(false); };
+    $("trainWarnProceed").addEventListener("click", onProceed);
+    $("trainWarnCancel").addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+  });
+}
+
+function showConfirm(title, message, okLabel = "Delete") {
+  return new Promise(resolve => {
+    const modal = $("confirmModal");
+    $("confirmTitle").textContent = title;
+    $("confirmMsg").textContent = message;
+    $("confirmOk").textContent = okLabel;
+    modal.classList.add("show");
+    const finish = (v) => {
+      modal.classList.remove("show");
+      $("confirmOk").removeEventListener("click", onOk);
+      $("confirmCancel").removeEventListener("click", onCancel);
+      modal.removeEventListener("click", onBackdrop);
+      resolve(v);
+    };
+    const onOk = () => finish(true);
+    const onCancel = () => finish(false);
+    const onBackdrop = (e) => { if (e.target === modal) finish(false); };
+    $("confirmOk").addEventListener("click", onOk);
+    $("confirmCancel").addEventListener("click", onCancel);
+    modal.addEventListener("click", onBackdrop);
+  });
+}
+
 $("trainBtn").addEventListener("click", startTraining);
 async function startTraining() {
   const outcome = $("outcomeSel").value;
   const models = [...document.querySelectorAll(".mdl:checked")].map(c => c.value);
   if (!models.length) { toast("Select at least one model.", "err"); return; }
+  if (TRAIN_META.n_train && TRAIN_META.n_train > LARGE_DATASET_ROWS) {
+    const proceed = await confirmLargeDataset(TRAIN_META.n_train);
+    if (!proceed) return;
+  }
   const exclude = [...$("excludeSel").selectedOptions].map(o => o.value);
   const confounders = [...$("confoundSel").selectedOptions].map(o => o.value);
   const grids = {};
@@ -299,18 +363,48 @@ async function startTraining() {
       }
     } else if (m.event === "complete") {
       es.close(); $("trainBtn").disabled = false; setBar(100);
-      renderValMetrics(metricKeys, metricsRows);
-      $("trainResults").style.display = "block";
-      document.querySelector('[data-tab="train"]').classList.add("done");
-      toast("Training complete.", "ok");
+      const nOk = m.results.length, nTotal = models.length;
+      if (nOk > 0) {
+        renderValMetrics(metricKeys, metricsRows);
+        $("trainResults").style.display = "block";
+        document.querySelector('[data-tab="train"]').classList.add("done");
+      }
+      toast(
+        nOk === nTotal ? "Training complete." : nOk > 0 ? `${nOk} of ${nTotal} models trained.` : "All models failed to train.",
+        nOk === nTotal ? "ok" : nOk > 0 ? "" : "err"
+      );
+      showTrainDone(nOk, nTotal);
     }
   };
   es.onerror = () => { es.close(); $("trainBtn").disabled = false; toast("Training stream error.", "err"); };
+}
+function showTrainDone(nOk, nTotal) {
+  const modal = $("trainDoneModal"), icon = $("trainDoneIcon"), failed = nOk === 0;
+  icon.textContent = failed ? "!" : "✓";
+  icon.classList.toggle("err", failed);
+  $("trainDoneTitle").textContent = failed ? "Training failed" : "Training complete";
+  $("trainDoneTest").style.display = failed ? "none" : "";
+  $("trainDoneRedo").textContent = failed ? "Close" : "View metrics";
+  $("trainDoneMsg").textContent = failed
+    ? `None of the ${nTotal} model${nTotal === 1 ? "" : "s"} trained successfully. Check the log above ` +
+      `for what went wrong, then adjust your settings and try again.`
+    : nOk === nTotal
+      ? `All ${nTotal} model${nTotal === 1 ? "" : "s"} trained successfully. Review the validation ` +
+        `metrics below, or jump straight to testing.`
+      : `${nOk} of ${nTotal} model${nTotal === 1 ? "" : "s"} trained successfully. Check the log above ` +
+        `for what went wrong with the rest.`;
+  modal.classList.add("show");
+  const close = () => modal.classList.remove("show");
+  const viewMetrics = () => { close(); if (!failed) $("trainResults").scrollIntoView({ behavior: "smooth", block: "start" }); };
+  $("trainDoneRedo").onclick = viewMetrics;
+  $("trainDoneTest").onclick = () => { close(); document.querySelector('[data-tab="test"]').click(); };
+  modal.onclick = (e) => { if (e.target === modal) close(); };
 }
 function log(s) { const l = $("trainLog"); l.textContent += s + "\n"; l.scrollTop = l.scrollHeight; }
 function setBar(p) { $("trainBar").style.width = p + "%"; $("trainPct").textContent = p ? p + "%" : ""; }
 function renderValMetrics(keys, rows) {
   const t = $("valMetricsTable"); t.innerHTML = "";
+  if (!keys || !keys.length) { t.innerHTML = `<tr><td class="muted">No metrics available.</td></tr>`; return; }
   t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${k}</th>`).join("")));
   rows.forEach(r => t.appendChild(el("tr", {}, `<td><b>${r.model}</b></td>` +
     keys.map(k => `<td>${num(r[k])}</td>`).join(""))));
@@ -343,6 +437,30 @@ async function loadModels() {
     if (pm) pm.appendChild(el("option", { value: m.name }, m.name));
     if (hm && meta.task === "binary") hm.appendChild(el("option", { value: m.name }, m.name));
   });
+  updateDeleteSelectedBtn();
+}
+function updateDeleteSelectedBtn() {
+  const n = document.querySelectorAll(".tmdl:checked").length;
+  const btn = $("deleteSelectedBtn");
+  btn.style.display = n ? "" : "none";
+  btn.textContent = n ? `Delete selected (${n})` : "Delete selected";
+}
+$("modelPickList").addEventListener("change", (e) => { if (e.target.classList.contains("tmdl")) updateDeleteSelectedBtn(); });
+async function confirmDeleteSelected() {
+  const names = [...document.querySelectorAll(".tmdl:checked")].map(c => c.value);
+  if (!names.length) return;
+  const ok = await showConfirm(
+    "Delete selected models?",
+    `This will permanently delete ${names.length} model${names.length === 1 ? "" : "s"}. This cannot be undone.`,
+    "Delete"
+  );
+  if (!ok) return;
+  const results = await Promise.all(names.map(n =>
+    fetch(`/api/models/${encodeURIComponent(n)}`, { method: "DELETE" }).then(r => r.json())));
+  const failed = results.filter(r => r.error).length;
+  toast(failed ? `Deleted ${names.length - failed} of ${names.length} models.` : "Model(s) deleted.",
+        failed ? "err" : "ok");
+  loadModels();
 }
 $("testBtn").addEventListener("click", async () => {
   const names = [...document.querySelectorAll(".tmdl:checked")].map(c => c.value);
@@ -508,6 +626,58 @@ async function runHL() {
 }
 
 // =====================================================================
+// 7. REPORTS
+// =====================================================================
+async function initReports() {
+  const d = await jget("/api/session");
+  const confirmed = d.active && d.meta && d.meta.stage === "confirmed";
+  $("reportsEmpty").style.display = confirmed ? "none" : "block";
+  $("reportsBody").style.display = confirmed ? "block" : "none";
+  if (!confirmed) return;
+  loadMethodsText(); loadTripodReport();
+}
+async function loadMethodsText() {
+  const d = await jget("/api/report/methods");
+  if (d.error) { toast(d.error, "err"); return; }
+  $("methodsTextArea").textContent = d.text || "";
+}
+function copyMethodsText() {
+  const text = $("methodsTextArea").textContent;
+  if (!text) { toast("Nothing to copy yet.", "err"); return; }
+  navigator.clipboard.writeText(text).then(() => toast("Copied.", "ok"));
+}
+function toggleEditMethods() {
+  const p = $("methodsTextArea");
+  const editing = p.getAttribute("contenteditable") === "true";
+  p.setAttribute("contenteditable", editing ? "false" : "true");
+  $("editMethodsBtn").textContent = editing ? "Edit" : "Done editing";
+  if (!editing) { p.focus(); toast("Editing locally — not saved to the server.", ""); }
+}
+function expandMethods() {
+  $("methodsModalSlot").appendChild($("methodsPaper"));
+  $("methodsModal").classList.add("show");
+}
+function closeMethodsModal() {
+  $("methodsPaperSlot").appendChild($("methodsPaper"));
+  $("methodsModal").classList.remove("show");
+}
+async function loadTripodReport() {
+  const d = await jget("/api/report/tripod");
+  if (d.error) { toast(d.error, "err"); return; }
+  $("tripodDisclaimer").textContent = d.disclaimer;
+  const s = d.summary;
+  $("tripodSummary").innerHTML = [
+    ["Found", s.found], ["Not found", s.not_found],
+    ["Not applicable", s.not_applicable], ["Manual review", s.manual_review]
+  ].map(([l, v]) => `<div class="card"><div class="lbl">${l}</div><div class="big">${v}</div></div>`).join("");
+  const t = $("tripodTable"); t.innerHTML = "";
+  t.appendChild(el("tr", {}, `<th>Section</th><th>Item</th><th>Status</th>`));
+  d.items.forEach(i => t.appendChild(el("tr", {}, `<td class="small">${i.section}</td>
+    <td class="small">${i.description}</td>
+    <td><span class="pill ${i.status}">${i.status.replace(/_/g, " ")}</span></td>`)));
+}
+
+// =====================================================================
 // downloads
 // =====================================================================
 function dlPng(dataUrl, fname) { const a = el("a", { href: dataUrl, download: fname }); a.click(); }
@@ -526,12 +696,69 @@ function dlImpCsv(jsonStr, fname) {
   dlBlob(csv, fname);
 }
 
-// restore session tag on load
-jget("/api/session").then(d => {
-  if (d.active && d.meta) {
-    const m = d.meta;
-    $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${m.filename || "loaded"}</b><br>${m.n_rows || ""} rows`;
-    if (m.stage === "confirmed") { State.confirmed = true; State.coltypes = m.coltypes || {};
-      document.querySelector('[data-tab="upload"]').classList.add("done"); }
-  }
+// =====================================================================
+// dataset history (sidebar)
+// =====================================================================
+function applySessionMeta(m) {
+  if (!m) { $("sessionTag").textContent = "No dataset loaded"; State.confirmed = false; return; }
+  $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${m.filename || "loaded"}</b><br>${m.n_rows || ""} rows`;
+  State.confirmed = m.stage === "confirmed";
+  State.coltypes = m.coltypes || {};
+  document.querySelector('[data-tab="upload"]').classList.toggle("done", State.confirmed);
+}
+
+async function loadDatasetList() {
+  const d = await jget("/api/sessions");
+  const list = $("datasetList");
+  if (!d.sessions || !d.sessions.length) { list.innerHTML = `<div class="ds-empty">No datasets yet.</div>`; return; }
+  list.innerHTML = "";
+  d.sessions.forEach(s => {
+    const active = s.session_id === d.active;
+    const label = s.filename || s.session_id;
+    const item = el("div", { className: "ds-item" + (active ? " active" : "") });
+    item.innerHTML = `<span class="ds-label" title="${label}">${label}${s.n_rows ? ` · ${s.n_rows} rows` : ""}</span>
+      <span class="ds-x" title="Delete dataset">&times;</span>`;
+    item.querySelector(".ds-label").addEventListener("click", () => switchDataset(s.session_id));
+    item.querySelector(".ds-x").addEventListener("click", (e) => { e.stopPropagation(); deleteDataset(s.session_id, label); });
+    list.appendChild(item);
+  });
+}
+
+async function switchDataset(sid) {
+  const d = await jpost(`/api/sessions/${sid}/activate`, {});
+  if (d.error) { toast(d.error, "err"); return; }
+  applySessionMeta(d.meta);
+  loadDatasetList();
+  const activeTab = document.querySelector(".nav a.active");
+  if (activeTab) refreshTab(activeTab.dataset.tab);
+  toast("Switched dataset.", "ok");
+}
+
+async function deleteDataset(sid, label) {
+  const ok = await showConfirm("Delete this dataset?",
+    `"${label}" and everything derived from it (splits, models trained on it) will be permanently deleted. This cannot be undone.`,
+    "Delete");
+  if (!ok) return;
+  const r = await fetch(`/api/sessions/${sid}`, { method: "DELETE" }).then(r => r.json());
+  if (r.error) { toast(r.error, "err"); return; }
+  const sess = await jget("/api/session");
+  if (!sess.active) applySessionMeta(null);
+  loadDatasetList();
+  toast("Dataset deleted.", "ok");
+}
+
+$("clearAllBtn").addEventListener("click", async () => {
+  const ok = await showConfirm("Clear all data?",
+    "This permanently deletes every uploaded dataset on this machine. This cannot be undone.", "Clear all data");
+  if (!ok) return;
+  const r = await fetch("/api/sessions", { method: "DELETE" }).then(r => r.json());
+  if (r.error) { toast(r.error, "err"); return; }
+  applySessionMeta(null);
+  document.querySelector('[data-tab="upload"]').classList.remove("done");
+  loadDatasetList();
+  toast("All data cleared.", "ok");
 });
+
+// restore session tag on load
+jget("/api/session").then(d => applySessionMeta(d.active ? d.meta : null));
+loadDatasetList();

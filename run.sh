@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Launch ClinTAB-ML-Foundry from the terminal.
+# Launch ClinTAB-ML from the terminal.
 #   ./run.sh            -> local dev server at http://127.0.0.1:5000
 #   ./run.sh prod       -> gunicorn (production, binds 0.0.0.0:5000)
 set -e

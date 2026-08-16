@@ -62,6 +62,10 @@ def determine_task(series):
 def model_catalogue(task):
     """The 15 models + sensible default grids, filtered by task."""
     if task in ("binary", "multiclass"):
+        # liblinear only fits an OvR scheme and raises on n_classes >= 3 in
+        # current sklearn -- fall back to saga (also supports l1) there.
+        lasso_solver = "saga" if task == "multiclass" else "liblinear"
+        lasso_max_iter = 3000 if task == "multiclass" else 2000
         return {
             "LogisticRegression": {
                 "model": LogisticRegression(max_iter=2000, solver="lbfgs"),
@@ -72,7 +76,7 @@ def model_catalogue(task):
                 "params": {"clf__C": [0.01, 0.1, 1, 10]},
             },
             "LassoLogistic": {
-                "model": LogisticRegression(penalty="l1", solver="liblinear", max_iter=2000),
+                "model": LogisticRegression(penalty="l1", solver=lasso_solver, max_iter=lasso_max_iter),
                 "params": {"clf__C": [0.01, 0.1, 1, 10]},
             },
             "ElasticNetLogistic": {
@@ -194,10 +198,22 @@ def make_scoring(metric, task):
             "mae": "neg_mean_absolute_error",
             "rmse": "neg_root_mean_squared_error",
         }.get(metric, "r2")
+    # sklearn's plain "roc_auc"/"recall"/"precision" scorers assume a binary
+    # outcome (average="binary") and raise ValueError on a multiclass one --
+    # route those to their multiclass-safe equivalents instead.
+    average = "macro" if task == "multiclass" else "binary"
     if metric == "f2":
-        return make_scorer(fbeta_score, beta=2, zero_division=0)
+        return make_scorer(fbeta_score, beta=2, average=average, zero_division=0)
     if metric == "f1":
-        return make_scorer(f1_score, zero_division=0)
+        return make_scorer(f1_score, average=average, zero_division=0)
+    if task == "multiclass":
+        return {
+            "roc": "roc_auc_ovr", "roc_auc": "roc_auc_ovr",
+            "auprc": "average_precision", "average_precision": "average_precision",
+            "recall": "recall_macro", "sensitivity": "recall_macro",
+            "precision": "precision_macro", "accuracy": "accuracy",
+            "balanced_accuracy": "balanced_accuracy",
+        }.get(metric, "roc_auc_ovr")
     return {
         "roc": "roc_auc", "roc_auc": "roc_auc",
         "auprc": "average_precision", "average_precision": "average_precision",
