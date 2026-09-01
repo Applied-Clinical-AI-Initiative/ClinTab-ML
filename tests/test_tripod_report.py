@@ -115,6 +115,83 @@ def test_fit_spline_marks_nonlinearity_found(session_id):
     assert _item(report, "nonlinearity_explored")["status"] == "found"
 
 
+def test_missing_data_handling_not_applicable_when_no_missingness(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "random", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": None, "smote_pref": False,
+                                    "missing": {}, "smote_hint": None},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "missing_data_handling")["status"] == "not_applicable"
+
+
+def test_missing_data_handling_found_when_a_column_had_a_decision(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "random", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": None, "smote_pref": False,
+                                    "missing": {"rare_lab": "remove"}, "smote_hint": None},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "missing_data_handling")["status"] == "found"
+
+
+def test_class_imbalance_not_applicable_when_no_smote_hint(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "random", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": None, "smote_pref": False,
+                                    "missing": {}, "smote_hint": None},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "class_imbalance")["status"] == "not_applicable"
+
+
+def test_class_imbalance_not_found_when_flagged_but_never_addressed(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "stratified", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": "mortality_30d", "smote_pref": False,
+                                    "missing": {},
+                                    "smote_hint": {"column": "mortality_30d",
+                                                   "minority_fraction": 0.19,
+                                                   "suggest_smote": True}},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    analysis_log.log_action(session_id, "train_model",
+                            inputs={"model": "LogisticRegression", "outcome": "mortality_30d",
+                                    "scoring": "roc", "smote": False, "cv_folds": None},
+                            outputs={"saved_as": "x", "metrics": {}})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "class_imbalance")["status"] == "not_found"
+
+
+def test_class_imbalance_found_when_smote_applied_at_confirm(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "stratified", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": "mortality_30d", "smote_pref": True,
+                                    "missing": {},
+                                    "smote_hint": {"column": "mortality_30d",
+                                                   "minority_fraction": 0.19,
+                                                   "suggest_smote": True}},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "class_imbalance")["status"] == "found"
+
+
+def test_class_imbalance_found_when_smote_applied_on_a_trained_model(session_id):
+    analysis_log.log_action(session_id, "confirm",
+                            inputs={"method": "stratified", "ratios": [0.7, 0.15, 0.15],
+                                    "stratify_col": "mortality_30d", "smote_pref": False,
+                                    "missing": {},
+                                    "smote_hint": {"column": "mortality_30d",
+                                                   "minority_fraction": 0.19,
+                                                   "suggest_smote": True}},
+                            outputs={"n_train": 420, "n_val": 90, "n_test": 90})
+    analysis_log.log_action(session_id, "train_model",
+                            inputs={"model": "RandomForest", "outcome": "mortality_30d",
+                                    "scoring": "roc", "smote": True, "cv_folds": None},
+                            outputs={"saved_as": "y", "metrics": {}})
+    report = tripod_report.generate_tripod_report(session_id)
+    assert _item(report, "class_imbalance")["status"] == "found"
+
+
 def test_summary_counts_match_item_statuses(session_id):
     analysis_log.log_action(session_id, "upload", inputs={"filename": "x.csv"},
                             outputs={"n_rows": 10, "n_cols": 2})

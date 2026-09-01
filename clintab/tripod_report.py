@@ -86,6 +86,39 @@ def _check_nonlinearity(entries):
     return "found" if _has_action(entries, "fit_spline") else "not_applicable"
 
 
+def _check_missing_data_handling(entries):
+    """'found' means at least one column actually had missing data and got
+    an explicit handling decision (impute/zero/remove/include) at confirm
+    time. If no column had any missingness, there was nothing to document."""
+    for e in entries:
+        if e["action"] == "confirm":
+            missing = e["inputs"].get("missing") or {}
+            return "found" if missing else "not_applicable"
+    return "not_applicable"
+
+
+def _check_class_imbalance(entries):
+    """'found' means SMOTE (or an equivalent resampling toggle) was actually
+    applied, at confirm time or on any trained model. 'not_found' means the
+    confirm step flagged the outcome as imbalanced (minority fraction < 30%,
+    the same threshold the app uses to suggest SMOTE) but it was never
+    applied. Otherwise there's no evidence of imbalance to address."""
+    imbalance_flagged = False
+    addressed = False
+    for e in entries:
+        if e["action"] == "confirm":
+            hint = e["inputs"].get("smote_hint")
+            if hint and hint.get("suggest_smote"):
+                imbalance_flagged = True
+            if e["inputs"].get("smote_pref"):
+                addressed = True
+        elif e["action"] == "train_model" and e["inputs"].get("smote"):
+            addressed = True
+    if addressed:
+        return "found"
+    return "not_found" if imbalance_flagged else "not_applicable"
+
+
 # Each item: id, section, a description in our own words (not verbatim
 # official TRIPOD+AI text), and either a check(entries) -> 'found' |
 # 'not_found' | 'not_applicable', or check=None for narrative items no log
@@ -110,7 +143,8 @@ _CHECKLIST = [
      "description": "Eligibility criteria for participants/records are described.",
      "check": None},
     {"id": "missing_data_handling", "section": "Methods: Data",
-     "description": "How missing data were handled is documented.", "check": None},
+     "description": "How missing data were handled is documented.",
+     "check": _check_missing_data_handling},
     {"id": "outcome_definition", "section": "Methods: Outcome",
      "description": "The outcome being predicted is clearly defined, including how "
                      "and when it was determined.", "check": _check_outcome_definition},
@@ -126,7 +160,7 @@ _CHECKLIST = [
      "check": _check_model_building},
     {"id": "class_imbalance", "section": "Methods: Analysis",
      "description": "If class imbalance was addressed (e.g. resampling), this is "
-                     "documented.", "check": None},
+                     "documented.", "check": _check_class_imbalance},
     {"id": "discrimination_reported", "section": "Results: Model performance",
      "description": "Discrimination (e.g. AUROC, concordance) is reported.",
      "check": _check_discrimination},

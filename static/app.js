@@ -30,6 +30,52 @@ async function jpost(url, body) {
 function pill(t) { return `<span class="pill ${t}">${t}</span>`; }
 function num(v) { return (v === null || v === undefined || v === "") ? "" : v; }
 
+// ---------- hover-definition glossary (Data Summary, Model Training, Model
+// Testing, Spline, Clinical Epi only) ----------
+const GLOSSARY = {
+  "AUROC": "Area under the ROC curve — how well the model tells apart who will vs won't have the outcome. 0.5 = random guessing, 1.0 = perfect.",
+  "AUPRC": "Area under the precision-recall curve — like AUROC, but more informative when the outcome is rare.",
+  "Sensitivity": "Of patients who truly had the outcome, the % the model correctly caught. Also called recall.",
+  "Specificity": "Of patients who truly did not have the outcome, the % correctly cleared.",
+  "PPV": "Positive predictive value — when the model predicts “yes,” how often it's actually right. Also called precision.",
+  "NPV": "Negative predictive value — when the model predicts “no,” how often it's actually right.",
+  "F1": "A single score balancing precision and sensitivity.",
+  "F2": "Like F1, but weights sensitivity (catching true cases) higher than precision.",
+  "Brier": "How well-calibrated the predicted probabilities are — lower is better.",
+  "Accuracy": "The % of all predictions the model got right.",
+  "BalancedAccuracy": "Accuracy adjusted so rare classes count as much as common ones.",
+  "MacroF1": "F1 averaged evenly across every class, regardless of how common each one is.",
+  "R2": "The % of variation in the outcome explained by the model.",
+  "RMSE": "Typical prediction error size, in the outcome's own units — penalizes large misses more than small ones.",
+  "MAE": "Typical prediction error size, in the outcome's own units, treating all misses equally.",
+  "Threshold": "The predicted-probability cutoff above which a prediction counts as “yes” (default 50%).",
+  "N": "Number of rows the statistic was computed on.",
+  "SD": "Standard deviation — how spread out the values are around the mean.",
+  "IQR": "Interquartile range — the span covering the middle 50% of values.",
+  "Grid search": "Automatically trying different model settings (hyperparameters) to find the combination that scores best.",
+  "SMOTE": "A technique for rare outcomes: creates synthetic extra examples of the minority class so the model doesn't just learn to predict the common outcome.",
+  "Confounding variables": "Variables forced into the model and tagged, rather than dropped or left to compete for selection.",
+  "Restricted Cubic Spline": "A smooth curve, allowed to bend only at its knots, fit through the data instead of a straight line.",
+  "Knots": "The points along the predictor's range where the spline's curve is allowed to change shape.",
+  "AIC": "A score for comparing model fit — lower generally means a better-fitting model.",
+  "Odds Ratio": "How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.",
+  "Risk Ratio": "How much more likely the outcome is, in plain risk/probability terms, for the exposed group.",
+  "NNT": "Number needed to treat — how many patients you'd need to treat to prevent one additional bad outcome.",
+  "NNH": "Number needed to harm — how many patients you'd need to expose to cause one additional bad outcome.",
+  "Kaplan–Meier": "A curve showing the fraction of patients who have not yet had an event (like death) over time.",
+  "Cox proportional hazards": "A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.",
+  "Log-rank": "A statistical test comparing two Kaplan–Meier curves to see if they're really different.",
+  "concordance": "Like AUROC, but for survival models — how often the model ranks patients' event risk in the right order.",
+  "HR": "Hazard ratio — how much a covariate speeds up (>1) or slows down (<1) time to the event.",
+  "Hosmer–Lemeshow": "A test checking whether a model's predicted probabilities match the real observed event rates.",
+  "HL statistic": "The Hosmer–Lemeshow test statistic — larger values suggest worse calibration.",
+  "2×2 table": "The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.",
+  "Pearson r": "A number from -1 to 1 measuring the strength and direction of a straight-line relationship between a feature and the outcome. Near 0 means little linear relationship — there could still be a non-linear one.",
+};
+function term(label, key) {
+  return label;
+}
+
 // ---------- tab navigation ----------
 function refreshTab(tab) {
   if (tab === "summary") loadSummary();
@@ -123,22 +169,33 @@ function renderPreview(fields, rows) {
 }
 
 const TYPES = ["binary", "categorical", "continuous", "date", "exclude"];
+function defaultMissingDecision(pct) {
+  if (pct > 50) return "remove";
+  if (pct >= 30) return "zero";
+  return "impute"; // 0 < pct < 30
+}
+function missingSelectHtml(c) {
+  if (!(c.pct_missing > 0)) return `<span class="muted small">—</span>`;
+  const def = defaultMissingDecision(c.pct_missing);
+  const opt = (v, label) => `<option value="${v}"${def === v ? " selected" : ""}>${label}</option>`;
+  return `<select id="miss_${c.name}" class="small">
+      ${opt("impute", "Impute (median / most frequent)")}
+      ${opt("zero", "Populate 0")}
+      ${opt("include", "Include as-is")}
+      ${opt("remove", "Remove column")}
+    </select>`;
+}
 function renderTypeTable(cols) {
   const t = $("typeTable"); t.innerHTML = "";
   t.appendChild(el("tr", {}, `<th>Column</th><th>Detected</th><th>Unique</th><th>% missing</th>
-    <th>Type override</th><th>If &gt;50% missing</th>`));
+    <th>Type override</th><th>Missing-data handling</th>`));
   cols.forEach(c => {
     const tr = el("tr");
     const radios = TYPES.map(tp => `<label class="small" style="font-weight:500;margin-right:8px">
         <input type="radio" name="ty_${c.name}" value="${tp}" ${c.type === tp ? "checked" : ""}> ${tp}</label>`).join("");
-    const miss = c.high_missing ? `<select id="miss_${c.name}" class="small">
-        <option value="include">Include as-is</option>
-        <option value="zero">Populate 0</option>
-        <option value="remove">Remove column</option></select>` :
-      `<span class="muted small">—</span>`;
     tr.innerHTML = `<td><b>${c.name}</b></td><td>${pill(c.type)}</td><td>${c.n_unique}</td>
       <td ${c.high_missing ? 'style="color:var(--warn);font-weight:600"' : ""}>${c.pct_missing}%</td>
-      <td>${radios}</td><td>${miss}</td>`;
+      <td>${radios}</td><td>${missingSelectHtml(c)}</td>`;
     t.appendChild(tr);
   });
 }
@@ -200,8 +257,8 @@ async function loadSummary() {
     `<div class="card"><div class="lbl">${l}</div><div class="big">${v}</div></div>`).join("");
 
   const ct = $("contTable"); ct.innerHTML = "";
-  ct.appendChild(el("tr", {}, `<th>Variable</th><th>N</th><th>% missing</th><th>Mean</th>
-    <th>Median</th><th>SD</th><th>IQR</th><th>Min</th><th>Max</th>`));
+  ct.appendChild(el("tr", {}, `<th>Variable</th><th>${term("N")}</th><th>% missing</th><th>Mean</th>
+    <th>Median</th><th>${term("SD")}</th><th>${term("IQR")}</th><th>Min</th><th>Max</th>`));
   d.continuous.forEach(r => ct.appendChild(el("tr", {}, `<td>${r.variable}</td><td>${r.n}</td>
     <td>${r.pct_missing}</td><td>${num(r.mean)}</td><td>${num(r.median)}</td><td>${num(r.sd)}</td>
     <td>${num(r.iqr)}</td><td>${num(r.min)}</td><td>${num(r.max)}</td>`)));
@@ -234,11 +291,33 @@ async function initTrain() {
 
   const o = $("outcomeSel"); o.innerHTML = "";
   d.outcomes.forEach(c => o.appendChild(el("option", { value: c.name }, `${c.name} (${c.type})`)));
-  fillMulti($("excludeSel"), d.columns.map(c => c.name));
-  fillMulti($("confoundSel"), d.columns.map(c => c.name));
+  fillChecklist($("excludeSel"), d.columns.map(c => c.name));
+  fillChecklist($("confoundSel"), d.columns.map(c => c.name));
   o.onchange = onOutcomeChange; onOutcomeChange();
 }
+async function useCustomSplit() {
+  const tf = $("customTrainCsv").files[0], vf = $("customValCsv").files[0];
+  if (!tf || !vf) { toast("Choose both a train CSV and a validation CSV.", "err"); return; }
+  const fd = new FormData();
+  fd.append("train_file", tf); fd.append("val_file", vf);
+  showBusy("Uploading custom split…", "re-detecting column types");
+  const d = await fetch("/api/train/upload-split", { method: "POST", body: fd }).then(r => r.json());
+  hideBusy();
+  if (d.error) {
+    toast(d.error, "err");
+    $("customSplitMsg").innerHTML = `<span class="err-text">${d.error}</span>`;
+    return;
+  }
+  $("customSplitMsg").innerHTML = `<span class="ok-text">Using custom split.</span> train ${d.n_train} · val ${d.n_val}`;
+  toast("Custom train/validation split applied.", "ok");
+  initTrain();
+}
 function fillMulti(sel, names) { sel.innerHTML = ""; names.forEach(n => sel.appendChild(el("option", { value: n }, n))); }
+function fillChecklist(box, names) {
+  box.innerHTML = "";
+  names.forEach(n => box.appendChild(el("label", {}, `<input type="checkbox" value="${n}"> ${n}`)));
+}
+function multiValues(box) { return [...box.querySelectorAll("input:checked")].map(c => c.value); }
 
 function taskForOutcome(name) {
   const c = TRAIN_META.outcomes.find(x => x.name === name);
@@ -328,8 +407,8 @@ async function startTraining() {
     const proceed = await confirmLargeDataset(TRAIN_META.n_train);
     if (!proceed) return;
   }
-  const exclude = [...$("excludeSel").selectedOptions].map(o => o.value);
-  const confounders = [...$("confoundSel").selectedOptions].map(o => o.value);
+  const exclude = multiValues($("excludeSel"));
+  const confounders = multiValues($("confoundSel"));
   const grids = {};
   models.forEach(m => { const t = $("grid_" + m); if (t) { try { grids[m] = JSON.parse(t.value); } catch (e) {} } });
 
@@ -405,7 +484,7 @@ function setBar(p) { $("trainBar").style.width = p + "%"; $("trainPct").textCont
 function renderValMetrics(keys, rows) {
   const t = $("valMetricsTable"); t.innerHTML = "";
   if (!keys || !keys.length) { t.innerHTML = `<tr><td class="muted">No metrics available.</td></tr>`; return; }
-  t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${k}</th>`).join("")));
+  t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${term(k)}</th>`).join("")));
   rows.forEach(r => t.appendChild(el("tr", {}, `<td><b>${r.model}</b></td>` +
     keys.map(k => `<td>${num(r[k])}</td>`).join(""))));
 }
@@ -422,18 +501,35 @@ $("pklUpload").addEventListener("change", e => {
     if (d.error) toast(d.error, "err"); else { toast("Model uploaded.", "ok"); loadModels(); }
   });
 });
+function fmtCreated(ts) {
+  if (!ts || ts.length < 15) return "";
+  const y = ts.slice(0, 4), mo = ts.slice(4, 6), d = ts.slice(6, 8),
+        h = ts.slice(9, 11), mi = ts.slice(11, 13);
+  const dt = new Date(`${y}-${mo}-${d}T${h}:${mi}`);
+  if (isNaN(dt)) return "";
+  return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+    ", " + dt.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
 async function loadModels() {
   const d = await jget("/api/models");
   const list = $("modelPickList"), pm = $("predModel"), hm = $("hlModel");
   if (pm) pm.innerHTML = ""; if (hm) hm.innerHTML = "";
-  if (!d.models.length) { list.innerHTML = `<span class="muted small">No models yet — train some first.</span>`; return; }
+  if (!d.models.length) { list.innerHTML = `<span class="muted small">Train Models to Display for Model Testing.</span>`;
+    updateDeleteSelectedBtn(); return; }
   list.innerHTML = "";
   d.models.forEach(m => {
     const meta = m.meta || {};
-    const tag = meta.task ? ` · ${meta.task}` : "";
-    const auc = meta.val_metrics && meta.val_metrics.AUROC != null ? ` · AUROC ${meta.val_metrics.AUROC}` : "";
-    list.appendChild(el("label", {}, `<input type="checkbox" class="tmdl" value="${m.name}">
-      <span><b>${meta.model || m.name}</b><br><span class="muted small">${m.name}${tag}${auc}</span></span>`));
+    const taskPill = meta.task ? `<span class="pill ${meta.task}">${meta.task}</span>` : "";
+    const auc = meta.val_metrics && meta.val_metrics.AUROC != null ? `AUROC ${meta.val_metrics.AUROC}` : "";
+    const when = fmtCreated(meta.created);
+    const metaLine = [auc, when].filter(Boolean).join(" · ");
+    const tip = `${m.name}${meta.outcome ? ` — outcome: ${meta.outcome}` : ""}${when ? ` — trained ${when}` : ""}`;
+    list.appendChild(el("label", { title: tip }, `<input type="checkbox" class="tmdl" value="${m.name}">
+      <span class="mdl-info">
+        <div class="mdl-top"><b>${meta.model || m.name}</b>${taskPill}</div>
+        ${meta.outcome ? `<span class="muted small mdl-sub">Outcome: ${meta.outcome}</span>` : ""}
+        ${metaLine ? `<span class="muted small mdl-sub">${metaLine}</span>` : ""}
+      </span>`));
     if (pm) pm.appendChild(el("option", { value: m.name }, m.name));
     if (hm && meta.task === "binary") hm.appendChild(el("option", { value: m.name }, m.name));
   });
@@ -477,10 +573,12 @@ $("testBtn").addEventListener("click", async () => {
   const d = await fetch("/api/test", { method: "POST", body: fd }).then(r => r.json());
   $("testBtn").disabled = false;
   if (d.error) { toast(d.error, "err"); return; }
+  document.querySelector('[data-tab="test"]').classList.add("done");
   renderTest(d);
 });
 function renderTest(d) {
   $("testResults").style.display = "block";
+  $("testResults").scrollIntoView({ behavior: "smooth", block: "start" });
   const ov = $("testOverlay"); ov.innerHTML = "";
   if (d.roc_png) ov.appendChild(plotBox(d.roc_png, "ROC overlay", "roc_overlay.png"));
   if (d.pr_png) ov.appendChild(plotBox(d.pr_png, "PR overlay", "pr_overlay.png"));
@@ -488,7 +586,7 @@ function renderTest(d) {
   const valid = d.models.filter(m => m.metrics);
   const keys = valid.length ? Object.keys(valid[0].metrics) : [];
   const t = $("testMetricsTable"); t.innerHTML = "";
-  t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${k}</th>`).join("")));
+  t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${term(k)}</th>`).join("")));
   d.models.forEach(m => {
     if (m.error) { t.appendChild(el("tr", {}, `<td><b>${m.name}</b></td><td colspan="${keys.length}" class="err-text">${m.error}</td>`)); return; }
     t.appendChild(el("tr", {}, `<td><b>${m.name}</b></td>` + keys.map(k => `<td>${num(m.metrics[k])}</td>`).join("")));
@@ -496,16 +594,35 @@ function renderTest(d) {
 
   const pp = $("testPlots"); pp.innerHTML = "";
   d.models.forEach(m => {
-    if (m.confusion_png) pp.appendChild(plotBox(m.confusion_png, m.name + " confusion", "confusion.png"));
-    if (m.calibration_png) pp.appendChild(plotBox(m.calibration_png, m.name + " calibration", "calibration.png"));
-    if (m.residuals_png) pp.appendChild(plotBox(m.residuals_png, m.name + " residuals", "residuals.png"));
-    if (m.pred_vs_actual_png) pp.appendChild(plotBox(m.pred_vs_actual_png, m.name + " pred vs actual", "pva.png"));
+    const hasPlots = m.confusion_png || m.calibration_png || m.residuals_png ||
+      m.pred_vs_actual_png || (m.correlations && m.correlations.length);
+    if (!hasPlots) return;
+    const group = el("div", { className: "test-model-group" });
+    group.appendChild(el("h4", {}, m.name));
+    const row = el("div", { className: "test-model-row" });
+    if (m.confusion_png) row.appendChild(plotBox(m.confusion_png, "confusion", "confusion.png"));
+    if (m.calibration_png) row.appendChild(plotBox(m.calibration_png, "calibration", "calibration.png"));
+    if (m.residuals_png) row.appendChild(plotBox(m.residuals_png, "residuals", "residuals.png"));
+    if (m.pred_vs_actual_png) row.appendChild(plotBox(m.pred_vs_actual_png, "pred vs actual", "pva.png"));
+    if (m.correlations && m.correlations.length) row.appendChild(correlationBox(m.name, m.correlations));
+    group.appendChild(row);
+    pp.appendChild(group);
   });
 }
 function plotBox(src, label, fname) {
   const d = el("div", { className: "plotwrap" });
   d.innerHTML = `<div class="small muted">${label}</div><img class="plot" src="${src}" style="max-width:430px">
     <div class="flex"><button class="ghost sm" onclick="dlPng('${src}','${fname}')">PNG</button></div>`;
+  return d;
+}
+function correlationBox(name, rows) {
+  const d = el("div", { className: "plotwrap" });
+  const body = rows.map(r => `<tr><td>${r.feature}</td><td>${num(r.pearson_r)}</td></tr>`).join("");
+  d.innerHTML = `<details>
+      <summary>${name}: view ${term("Pearson r")} table</summary>
+      <table style="margin-top:6px;max-width:320px">
+        <tr><th>Feature</th><th>${term("Pearson r")}</th></tr>${body}</table>
+    </details>`;
   return d;
 }
 
@@ -553,10 +670,11 @@ async function initSpline() {
 $("splBtn").addEventListener("click", async () => {
   const d = await jpost("/api/spline", { predictor: $("splPred").value, outcome: $("splOut").value, n_knots: +$("splKnots").value });
   if (d.error) { toast(d.error, "err"); return; }
+  document.querySelector('[data-tab="spline"]').classList.add("done");
   $("splineResult").innerHTML = `<img class="plot" src="${d.png}" style="max-width:560px">
     <div class="flex" style="margin-top:6px">
       <button class="ghost sm" onclick="dlPng('${d.png}','spline.png')">PNG</button>
-      <span class="small muted">N=${d.n} · knots at ${d.knots.join(", ")} · AIC ${d.aic}</span></div>`;
+      <span class="small muted">N=${d.n} · ${term("knots", "Knots")} at ${d.knots.join(", ")} · ${term("AIC")} ${d.aic}</span></div>`;
 });
 
 // =====================================================================
@@ -582,9 +700,9 @@ async function runEpi2x2() {
   if (r.error) { toast(r.error, "err"); return; }
   $("epi2x2Result").innerHTML = `
     <div class="cards">
-      <div class="card"><div class="lbl">Odds Ratio</div><div class="big">${r.odds_ratio}</div><div class="small">95% CI ${r.or_ci[0]}–${r.or_ci[1]}</div></div>
-      <div class="card"><div class="lbl">Risk Ratio</div><div class="big">${r.risk_ratio}</div><div class="small">95% CI ${r.rr_ci[0]}–${r.rr_ci[1]}</div></div>
-      <div class="card"><div class="lbl">${n.measure || "NNT/NNH"}</div><div class="big">${n.value ?? "—"}</div><div class="small">ARD ${r.abs_risk_diff}</div></div>
+      <div class="card"><div class="lbl">${term("Odds Ratio")}</div><div class="big">${r.odds_ratio}</div><div class="small">95% CI ${r.or_ci[0]}–${r.or_ci[1]}</div></div>
+      <div class="card"><div class="lbl">${term("Risk Ratio")}</div><div class="big">${r.risk_ratio}</div><div class="small">95% CI ${r.rr_ci[0]}–${r.rr_ci[1]}</div></div>
+      <div class="card"><div class="lbl">${term(n.measure || "NNT/NNH", n.measure)}</div><div class="big">${n.value ?? "—"}</div><div class="small">ARD ${r.abs_risk_diff}</div></div>
       <div class="card"><div class="lbl">χ² p-value</div><div class="big">${r.p_value}</div><div class="small">χ²=${r.chi2}</div></div>
     </div>
     <div class="small muted" style="margin-top:8px">${n.interpretation || ""} ${r.corrected ? "(Haldane–Anscombe correction applied)" : ""}</div>`;
@@ -597,7 +715,7 @@ async function runKM() {
     <table style="margin-top:8px;width:auto"><tr><th>Group</th><th>N</th><th>Median survival</th></tr>`;
   d.curves.forEach(c => h += `<tr><td>${c.name}</td><td>${c.n}</td><td>${c.median_survival ?? "not reached"}</td></tr>`);
   h += `</table>`;
-  if (d.logrank) h += `<div class="small" style="margin-top:6px">Log-rank χ²=${d.logrank.test_statistic}, p=${d.logrank.p_value}</div>`;
+  if (d.logrank) h += `<div class="small" style="margin-top:6px">${term("Log-rank")} χ²=${d.logrank.test_statistic}, p=${d.logrank.p_value}</div>`;
   $("kmResult").innerHTML = h;
 }
 async function runCox() {
@@ -605,8 +723,8 @@ async function runCox() {
   if (!cov.length) { toast("Pick covariates.", "err"); return; }
   const d = await jpost("/api/epi/cox", { time: $("kmTime").value, event: $("kmEvent").value, covariates: cov });
   if (d.error) { toast(d.error, "err"); return; }
-  let h = `<div class="small muted">N=${d.n}, events=${d.n_events}, concordance=${d.concordance}</div>
-    <table style="margin-top:6px"><tr><th>Covariate</th><th>HR</th><th>95% CI</th><th>coef</th><th>p</th></tr>`;
+  let h = `<div class="small muted">N=${d.n}, events=${d.n_events}, ${term("concordance")}=${d.concordance}</div>
+    <table style="margin-top:6px"><tr><th>Covariate</th><th>${term("HR")}</th><th>95% CI</th><th>coef</th><th>p</th></tr>`;
   d.rows.forEach(r => h += `<tr><td>${r.covariate}</td><td>${r.hazard_ratio}</td><td>${r.hr_lower}–${r.hr_upper}</td><td>${r.coef}</td><td>${r.p_value}</td></tr>`);
   $("coxResult").innerHTML = h + `</table>`;
 }
@@ -614,7 +732,7 @@ async function runHL() {
   if (!$("hlModel").value) { toast("Pick a binary model.", "err"); return; }
   const d = await jpost("/api/epi/hl", { model: $("hlModel").value });
   if (d.error) { toast(d.error, "err"); return; }
-  let h = `<div class="cards"><div class="card"><div class="lbl">HL statistic</div><div class="big">${d.hl_statistic}</div>
+  let h = `<div class="cards"><div class="card"><div class="lbl">${term("HL statistic")}</div><div class="big">${d.hl_statistic}</div>
       <div class="small">df ${d.dof}</div></div>
       <div class="card"><div class="lbl">p-value</div><div class="big">${d.p_value}</div>
       <div class="small">${d.well_calibrated ? "well calibrated" : "poor fit"}</div></div></div>

@@ -74,6 +74,26 @@ def test_apply_missing_handling_zero_fills_na():
     assert out.loc[8, "age"] == 0
 
 
+def test_apply_missing_handling_impute_numeric_uses_median():
+    df = pd.DataFrame({"age": [10, 20, 30, np.nan]})
+    out = stats.apply_missing_handling(df, {"age": "impute"})
+    assert out["age"].isna().sum() == 0
+    assert out.loc[3, "age"] == 20.0
+
+
+def test_apply_missing_handling_impute_categorical_uses_mode():
+    df = pd.DataFrame({"sex": ["M", "M", "F", np.nan]})
+    out = stats.apply_missing_handling(df, {"sex": "impute"})
+    assert out["sex"].isna().sum() == 0
+    assert out.loc[3, "sex"] == "M"
+
+
+def test_apply_missing_handling_impute_all_missing_column_left_as_is():
+    df = pd.DataFrame({"x": [np.nan, np.nan, np.nan]})
+    out = stats.apply_missing_handling(df, {"x": "impute"})
+    assert out["x"].isna().sum() == 3
+
+
 def test_apply_missing_handling_include_leaves_column_untouched():
     df = _sample_df()
     out = stats.apply_missing_handling(df, {"age": "include"})

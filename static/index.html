@@ -69,6 +69,16 @@
   select,input[type=text],input[type=number],textarea{font:inherit;padding:7px 9px;
     border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);width:100%}
   textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  /* Model Testing & Spline tabs only: unify control heights (dropdown/input/button) */
+  #tab-test select,#tab-test input[type=text],#tab-test input[type=number],#tab-test button,
+  #tab-spline select,#tab-spline input[type=text],#tab-spline input[type=number],#tab-spline button{
+    height:38px;padding:0 16px}
+  #tab-test select,#tab-test input[type=text],#tab-test input[type=number],
+  #tab-spline select,#tab-spline input[type=text],#tab-spline input[type=number]{padding:0 9px}
+  #tab-test button.sm,#tab-spline button.sm{height:28px;padding:0 10px}
+  #tab-test select,#tab-spline select{appearance:none;-webkit-appearance:none;-moz-appearance:none;cursor:pointer;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%236b7785'/></svg>");
+    background-repeat:no-repeat;background-position:right 11px center;padding-right:28px}
   label{font-weight:600;font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
   .row{display:flex;gap:16px;flex-wrap:wrap}
   .row>div{flex:1;min-width:160px}
@@ -129,9 +139,25 @@
   .toast.err{background:var(--err)} .toast.ok{background:var(--ok)}
   img.plot{max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
   .plotwrap{display:inline-block;margin:8px 12px 8px 0;vertical-align:top}
+  .test-model-group{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fbfcfe}
+  .test-model-group h4{margin:0 0 4px;font-size:14px}
+  .test-model-row{display:flex;flex-wrap:wrap;gap:4px}
+  .test-model-row .plotwrap{margin:8px 12px 0 0}
   .checklist{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px}
   .checklist label{font-weight:500;color:var(--ink);display:flex;gap:7px;align-items:center;
         background:#f7fafd;border:1px solid var(--line);border-radius:6px;padding:7px 9px;cursor:pointer}
+  #modelPickList{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+  #modelPickList label{align-items:flex-start;padding:10px}
+  #modelPickList input{margin-top:2px}
+  .varpick{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));max-height:180px;overflow-y:auto;
+        padding:2px;border:1px solid var(--line);border-radius:8px;background:#fbfcfe}
+  .varpick label{background:#fff}
+  .varpick label:has(input:checked){background:var(--chip);border-color:var(--brand)}
+  .mdl-info{flex:1;min-width:0}
+  .mdl-top{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px}
+  .mdl-top b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mdl-top .pill{flex-shrink:0}
+  .mdl-sub{display:block;line-height:1.4}
   details{border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-top:8px;background:#fafcff}
   summary{cursor:pointer;font-weight:600;font-size:12px;color:var(--brand-d)}
   .accordion{display:flex;flex-direction:column;gap:8px}
@@ -153,6 +179,9 @@
   .ok-text{color:var(--ok);font-weight:600}
   .small{font-size:12px}
   .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .file-btn{display:inline-flex;align-items:center;margin:0;cursor:pointer;
+    background:#eef3f9;color:var(--brand-d);padding:5px 10px;border-radius:7px;
+    font-weight:600;font-size:12px}
   .spinner{border:3px solid #dfe9f4;border-top-color:var(--brand);border-radius:50%;
     width:34px;height:34px;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -293,7 +322,10 @@
       <div class="panel" id="typePanel" style="display:none">
         <h3>Column types &amp; missing-data handling</h3>
         <p class="hint">Auto-detected: <b>binary</b>=2 values, <b>categorical</b>=strings or &lt;10 integers,
-          <b>continuous</b>=numeric &gt;10 values. Columns over 50% missing are flagged — choose include / fill 0 / remove.</p>
+          <b>continuous</b>=numeric &gt;10 values. Any column with missing data gets a handling choice,
+          defaulted by how much is missing: under 30% is imputed (median for numeric columns, most
+          frequent value for categorical), 30&ndash;50% is filled with 0, and over 50% is removed.
+          Override any column's choice as needed.</p>
         <div class="scroll"><table id="typeTable"></table></div>
       </div>
 
@@ -344,18 +376,30 @@
       <div id="trainEmpty" class="panel muted">Confirm a dataset first.</div>
       <div id="trainBody" style="display:none">
         <div class="panel">
+          <h3>Optional: bring your own train / validation split</h3>
+          <p class="hint">Skip the automatic split from Data Upload and train on your own pre-split
+            CSVs instead. Column types are re-detected from these files. The held-out test set from
+            Data Upload is left untouched.</p>
+          <div class="row">
+            <div><label>Train CSV</label><input type="file" id="customTrainCsv" accept=".csv"></div>
+            <div><label>Validation CSV</label><input type="file" id="customValCsv" accept=".csv"></div>
+            <div style="display:flex;align-items:flex-end"><button class="ghost" onclick="useCustomSplit()">Use this split</button></div>
+          </div>
+          <div id="customSplitMsg" class="small" style="margin-top:8px"></div>
+        </div>
+        <div class="panel">
           <h3>1 · Outcome &amp; variables</h3>
           <div class="row">
             <div><label>Outcome</label><select id="outcomeSel"></select>
                  <div class="hint" id="taskHint"></div></div>
-            <div><label>Optimize for (grid search metric)</label><select id="scoreSel"></select></div>
-            <div><label>Classification threshold</label><input id="thrInput" type="number" value="0.5" step="0.05" min="0" max="1"></div>
+            <div><label>Optimize for (<span class="term" tabindex="0" data-tip="Automatically trying different model settings (hyperparameters) to find the combination that scores best.">grid search</span> metric)</label><select id="scoreSel"></select></div>
+            <div><label><span class="term" tabindex="0" data-tip="The predicted-probability cutoff above which a prediction counts as &ldquo;yes&rdquo; (default 50%).">Classification threshold</span></label><input id="thrInput" type="number" value="0.5" step="0.05" min="0" max="1"></div>
           </div>
           <div class="grid2" style="margin-top:12px">
             <div><label>Exclusion variables (never used as features)</label>
-              <select id="excludeSel" multiple size="6"></select></div>
-            <div><label>Confounding variables (forced in, tagged)</label>
-              <select id="confoundSel" multiple size="6"></select></div>
+              <div class="checklist varpick" id="excludeSel"></div></div>
+            <div><label><span class="term" tabindex="0" data-tip="Variables forced into the model and tagged, rather than dropped or left to compete for selection.">Confounding variables</span> (forced in, tagged)</label>
+              <div class="checklist varpick" id="confoundSel"></div></div>
           </div>
         </div>
         <div class="panel">
@@ -364,9 +408,9 @@
             <button class="ghost sm" onclick="toggleModels(true)">Select all</button>
             <button class="ghost sm" onclick="toggleModels(false)">Clear</button>
             <label class="flex" style="margin-left:auto;font-weight:600;color:var(--ink)">
-              <input type="checkbox" id="gridToggle" checked> Grid search (tune hyperparameters)</label>
+              <input type="checkbox" id="gridToggle" checked> <span class="term" tabindex="0" data-tip="Automatically trying different model settings (hyperparameters) to find the combination that scores best.">Grid search</span></label>
             <label class="flex" style="font-weight:600;color:var(--ink)" id="smoteTrainBox">
-              <input type="checkbox" id="smoteTrain"> SMOTE</label>
+              <input type="checkbox" id="smoteTrain"> <span class="term" tabindex="0" data-tip="A technique for rare outcomes: creates synthetic extra examples of the minority class so the model doesn't just learn to predict the common outcome.">SMOTE</span></label>
           </div>
           <div class="checklist" id="modelList"></div>
           <details><summary>Edit hyperparameter grids (JSON per model)</summary>
@@ -396,16 +440,16 @@
         <h3>Saved &amp; uploaded models</h3>
         <div class="flex" style="margin-bottom:8px">
           <button class="ghost sm" onclick="loadModels()">Refresh</button>
-          <label class="ghost sm" style="cursor:pointer;background:#eef3f9;color:var(--brand-d);padding:5px 10px;border-radius:7px;font-weight:600">
+          <label class="file-btn">
             Upload .pkl <input type="file" id="pklUpload" accept=".pkl" style="display:none"></label>
           <button class="sm" id="deleteSelectedBtn" style="display:none;background:var(--err)" onclick="confirmDeleteSelected()">Delete selected</button>
         </div>
-        <div class="checklist" id="modelPickList"><span class="muted small">No models yet — train some first.</span></div>
+        <div class="checklist" id="modelPickList"><span class="muted small">Train Models to Display for Model Testing.</span></div>
         <div class="row" style="margin-top:14px">
           <div><label>Test data source</label>
             <select id="testSource"><option value="test">Held-out test set</option>
               <option value="upload">Upload new CSV</option></select></div>
-          <div><label>Threshold</label><input id="testThr" type="number" value="0.5" step="0.05"></div>
+          <div><label><span class="term" tabindex="0" data-tip="The predicted-probability cutoff above which a prediction counts as &ldquo;yes&rdquo; (default 50%).">Threshold</span></label><input id="testThr" type="number" value="0.5" step="0.05"></div>
           <div id="testUploadBox" style="display:none"><label>New CSV</label><input type="file" id="testCsv" accept=".csv"></div>
           <div style="display:flex;align-items:flex-end"><button id="testBtn">Run testing</button></div>
         </div>
@@ -438,14 +482,14 @@
 
     <!-- ================= SPLINE ================= -->
     <section class="section" id="tab-spline">
-      <h2>Restricted Cubic Spline</h2>
+      <h2><span class="term" tabindex="0" data-tip="A smooth curve, allowed to bend only at its knots, fit through the data instead of a straight line.">Restricted Cubic Spline</span></h2>
       <p class="lead">Log-odds of a binary outcome across a continuous predictor, knots marked.</p>
       <div id="splineEmpty" class="panel muted">Confirm a dataset first.</div>
       <div class="panel" id="splineBody" style="display:none">
         <div class="row">
           <div><label>Continuous predictor</label><select id="splPred"></select></div>
           <div><label>Binary outcome</label><select id="splOut"></select></div>
-          <div><label>Knots</label><select id="splKnots"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></div>
+          <div><label><span class="term" tabindex="0" data-tip="The points along the predictor's range where the spline's curve is allowed to change shape.">Knots</span></label><select id="splKnots"><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option></select></div>
           <div style="display:flex;align-items:flex-end"><button id="splBtn">Fit spline</button></div>
         </div>
         <div id="splineResult" style="margin-top:14px"></div>
@@ -458,7 +502,7 @@
       <p class="lead">2×2 measures, survival analysis, and goodness-of-fit.</p>
 
       <div class="panel">
-        <h3>Odds ratio / Risk ratio / NNT–NNH (2×2 table)</h3>
+        <h3><span class="term" tabindex="0" data-tip="How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.">Odds ratio</span> / <span class="term" tabindex="0" data-tip="How much more likely the outcome is, in plain risk/probability terms, for the exposed group.">Risk ratio</span> / <span class="term" tabindex="0" data-tip="Number needed to treat/harm — how many patients you'd need to treat (or expose) to cause one additional good (or bad) outcome.">NNT&ndash;NNH</span> (<span class="term" tabindex="0" data-tip="The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.">2&times;2 table</span>)</h3>
         <table style="width:auto"><tr><th></th><th>Outcome +</th><th>Outcome −</th></tr>
           <tr><th>Exposed</th><td><input id="ea" type="number" value="20" style="width:90px"></td><td><input id="eb" type="number" value="80" style="width:90px"></td></tr>
           <tr><th>Unexposed</th><td><input id="ec" type="number" value="10" style="width:90px"></td><td><input id="ed" type="number" value="90" style="width:90px"></td></tr></table>
@@ -469,7 +513,7 @@
       <div class="panel" id="survPanel">
         <div id="epiEmpty" class="muted">Confirm a dataset to use survival &amp; calibration tools.</div>
         <div id="epiBody" style="display:none">
-          <h3>Kaplan–Meier &amp; Cox proportional hazards</h3>
+          <h3><span class="term" tabindex="0" data-tip="A curve showing the fraction of patients who have not yet had an event (like death) over time.">Kaplan&ndash;Meier</span> &amp; <span class="term" tabindex="0" data-tip="A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.">Cox proportional hazards</span></h3>
           <div class="row">
             <div><label>Time / duration</label><select id="kmTime"></select></div>
             <div><label>Event (1=event)</label><select id="kmEvent"></select></div>
@@ -482,7 +526,7 @@
             <div class="flex" style="margin-top:8px"><button onclick="runCox()">Fit Cox model</button></div></div>
           <div id="coxResult" style="margin-top:12px"></div>
 
-          <h3 style="margin-top:22px">Hosmer–Lemeshow calibration</h3>
+          <h3 style="margin-top:22px"><span class="term" tabindex="0" data-tip="A test checking whether a model's predicted probabilities match the real observed event rates.">Hosmer&ndash;Lemeshow</span> calibration</h3>
           <div class="row">
             <div><label>Saved binary model</label><select id="hlModel"></select></div>
             <div style="display:flex;align-items:flex-end"><button onclick="runHL()">Run on test set</button></div>

@@ -192,7 +192,8 @@ def confirm():
     })
     store.save_meta(sid, meta)
     analysis_log.log_action(sid, "confirm", inputs={"method": method, "ratios": r,
-                            "stratify_col": stratify_col, "smote_pref": smote_pref},
+                            "stratify_col": stratify_col, "smote_pref": smote_pref,
+                            "missing": missing, "smote_hint": smote_hint},
                             outputs={"n_train": len(train), "n_val": len(val), "n_test": len(test)})
     return jsonify({"ok": True, "n_train": len(train), "n_val": len(val),
                     "n_test": len(test), "method": method, "smote_hint": smote_hint})
@@ -274,6 +275,56 @@ def train_columns():
         "smote_available": ml.HAS_SMOTE,
         "n_train": meta.get("n_train"),
     })
+
+
+@bp.route("/api/train/upload-split", methods=["POST"])
+def train_upload_split():
+    """Bring-your-own train/validation split: replaces train.csv/val.csv for
+    this session with user-uploaded CSVs instead of the automatic split from
+    /api/confirm. The held-out test.csv and full.csv (used by Data Summary /
+    Spline / Clinical Epi) are left untouched."""
+    sid = require_session()
+    if not sid:
+        return jsonify({"error": "No active session."}), 400
+    if "train_file" not in request.files or "val_file" not in request.files:
+        return jsonify({"error": "Both a train CSV and a validation CSV are required."}), 400
+
+    try:
+        train_df = pd.read_csv(request.files["train_file"])
+        val_df = pd.read_csv(request.files["val_file"])
+    except Exception as e:
+        return jsonify({"error": f"Could not parse CSV: {e}"}), 400
+
+    if train_df.empty or val_df.empty:
+        return jsonify({"error": "Uploaded train/validation CSVs must not be empty."}), 400
+    if set(train_df.columns) != set(val_df.columns):
+        return jsonify({"error": "Train and validation CSVs must have the same columns."}), 400
+
+    train_df.to_csv(store.session_path(sid, "train.csv"), index=False)
+    val_df.to_csv(store.session_path(sid, "val.csv"), index=False)
+
+    # re-detect column types from the uploaded data so outcome selection and
+    # coltype-aware preprocessing downstream stay consistent with what's
+    # actually in these files
+    combined = pd.concat([train_df, val_df], axis=0, ignore_index=True)
+    cols = stats.detect_column_types(combined)
+    coltypes = {c["name"]: c["type"] for c in cols}
+
+    meta = store.load_meta(sid)
+    meta.update({
+        "coltypes": coltypes,
+        "n_train": int(len(train_df)),
+        "n_val": int(len(val_df)),
+        "custom_split": True,
+    })
+    store.save_meta(sid, meta)
+    analysis_log.log_action(
+        sid, "upload_custom_split",
+        inputs={"train_filename": request.files["train_file"].filename,
+                "val_filename": request.files["val_file"].filename},
+        outputs={"n_train": len(train_df), "n_val": len(val_df)})
+
+    return jsonify({"ok": True, "n_train": len(train_df), "n_val": len(val_df), "columns": cols})
 
 
 @bp.route("/api/train", methods=["POST"])
@@ -471,6 +522,9 @@ def test_models():
             analysis_log.log_action(sid, "test_model", inputs={"model": name, "source": source},
                                     outputs={"metrics": metrics})
         entry = {"name": name, "metrics": metrics, "coords": coords}
+        if task in ("binary", "continuous"):
+            corr = ml.feature_outcome_correlations(df, outcome, feat_cols, task)
+            entry["correlations"] = corr.head(20).to_dict(orient="records")
         if task == "binary":
             roc_series.append({"name": name, **coords["roc"]})
             pr_series.append({"name": name, **coords["pr"]})

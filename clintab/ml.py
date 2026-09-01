@@ -470,6 +470,36 @@ def feature_importance(pipe, df_val, outcome, feat_cols, task):
             .reset_index(drop=True))
 
 
+def feature_outcome_correlations(df, outcome, feat_cols, task):
+    """Pearson correlation coefficient between each numeric feature and the
+    outcome, on this dataframe. Only meaningful for binary (0/1-encoded, so
+    this is really a point-biserial correlation) or continuous outcomes --
+    multiclass labels have no inherent order, so a Pearson r against them
+    isn't statistically meaningful and callers should skip this for
+    multiclass. Non-numeric or constant-valued features are skipped, since
+    Pearson only applies to a linear numeric relationship.
+    Returns a DataFrame [feature, pearson_r] sorted by |pearson_r| descending.
+    """
+    y, _ = encode_outcome(df[outcome], task)
+    y = pd.Series(y, index=df.index)
+
+    rows = []
+    for c in feat_cols:
+        x = pd.to_numeric(df[c], errors="coerce")
+        mask = x.notna() & y.notna()
+        if mask.sum() < 2 or x[mask].nunique() < 2 or y[mask].nunique() < 2:
+            continue
+        r = x[mask].corr(y[mask])
+        if pd.notna(r):
+            rows.append({"feature": c, "pearson_r": round(float(r), 4)})
+
+    if not rows:
+        return pd.DataFrame(columns=["feature", "pearson_r"])
+    out = pd.DataFrame(rows)
+    return (out.reindex(out["pearson_r"].abs().sort_values(ascending=False).index)
+            .reset_index(drop=True))
+
+
 # ============================================================================
 # 7. Single-row prediction
 # ============================================================================

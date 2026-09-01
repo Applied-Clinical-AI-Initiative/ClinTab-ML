@@ -183,6 +183,49 @@ def test_evaluate_multiclass_returns_roc_pr_coords():
     assert len(coords["roc"]) == len(coords["pr"])
 
 
+def test_feature_outcome_correlations_binary_ranks_by_abs_r():
+    rng = np.random.RandomState(0)
+    n = 200
+    strong = rng.normal(0, 1, n)
+    outcome = (strong + rng.normal(0, 0.1, n) > 0).astype(int)  # tightly tied to `strong`
+    noise = rng.normal(0, 1, n)  # unrelated to outcome
+    df = pd.DataFrame({"strong": strong, "noise": noise, "outcome": outcome})
+
+    out = ml.feature_outcome_correlations(df, "outcome", ["strong", "noise"], "binary")
+    assert list(out["feature"]) == ["strong", "noise"]
+    assert abs(out.loc[0, "pearson_r"]) > abs(out.loc[1, "pearson_r"])
+    assert -1.0 <= out.loc[0, "pearson_r"] <= 1.0
+
+
+def test_feature_outcome_correlations_continuous_outcome():
+    rng = np.random.RandomState(0)
+    n = 100
+    x = rng.normal(0, 1, n)
+    y = 2 * x + rng.normal(0, 0.05, n)
+    df = pd.DataFrame({"x": x, "y": y})
+
+    out = ml.feature_outcome_correlations(df, "y", ["x"], "continuous")
+    assert out.loc[0, "pearson_r"] > 0.95  # strong positive linear relationship
+
+
+def test_feature_outcome_correlations_skips_non_numeric_and_constant_columns():
+    df = pd.DataFrame({
+        "cat": ["a", "b", "a", "b"],
+        "constant": [1, 1, 1, 1],
+        "age": [50, 60, 70, 80],
+        "outcome": [0, 1, 0, 1],
+    })
+    out = ml.feature_outcome_correlations(df, "outcome", ["cat", "constant", "age"], "binary")
+    assert list(out["feature"]) == ["age"]
+
+
+def test_feature_outcome_correlations_no_usable_features_returns_empty():
+    df = pd.DataFrame({"cat": ["a", "b"], "outcome": [0, 1]})
+    out = ml.feature_outcome_correlations(df, "outcome", ["cat"], "binary")
+    assert out.empty
+    assert list(out.columns) == ["feature", "pearson_r"]
+
+
 def test_predict_single_binary_returns_probability():
     df = _binary_frame(n=160)
     train, val = df.iloc[:120], df.iloc[120:]

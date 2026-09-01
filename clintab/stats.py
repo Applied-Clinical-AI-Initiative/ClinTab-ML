@@ -192,10 +192,13 @@ def summarize(df, coltypes):
 
 
 def apply_missing_handling(df, decisions):
-    """decisions: dict {col: 'include' | 'zero' | 'remove'}.
+    """decisions: dict {col: 'include' | 'zero' | 'remove' | 'impute'}.
        'remove'  -> drop the column entirely
        'zero'    -> fill NaN with 0
        'include' -> leave as-is (rows may be dropped later by complete-case)
+       'impute'  -> fill NaN with the column median (numeric) or most frequent
+                    value (categorical) -- simple/univariate imputation, matching
+                    what ml.build_preprocessor already does at model-training time.
     Returns the cleaned DataFrame.
     """
     df = df.copy()
@@ -203,6 +206,18 @@ def apply_missing_handling(df, decisions):
     if drop:
         df = df.drop(columns=drop)
     for c, d in decisions.items():
-        if d == "zero" and c in df.columns:
+        if c not in df.columns:
+            continue
+        if d == "zero":
             df[c] = df[c].fillna(0)
+        elif d == "impute":
+            if pd.api.types.is_numeric_dtype(df[c]):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")  # all-NaN column -> benign "Mean of empty slice"
+                    fill = df[c].median()
+            else:
+                mode = df[c].mode(dropna=True)
+                fill = mode.iloc[0] if not mode.empty else None
+            if fill is not None and pd.notna(fill):
+                df[c] = df[c].fillna(fill)
     return df
