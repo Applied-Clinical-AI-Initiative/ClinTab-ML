@@ -116,9 +116,23 @@ def pred_vs_actual_plot(actual, pred, title="Predicted vs Actual"):
     return fig
 
 
+def _short_label(name, max_len=42):
+    """Display-only cleanup for a feature name: drop the ColumnTransformer's
+    num__/cat__ prefix and truncate very long one-hot category labels (e.g. a
+    multi-value categorical column whose raw values are comma-joined strings)
+    so a handful of outlier labels don't blow up the whole plot's width. The
+    underlying CSV export is untouched, this only affects the PNG."""
+    if name.startswith("num__") or name.startswith("cat__"):
+        name = name.split("__", 1)[1]
+    if len(name) > max_len:
+        name = name[:max_len - 1].rstrip() + "…"
+    return name
+
+
 def importance_plot(names, values, title="Feature Importance (top 20)"):
-    names, values = list(names)[:20][::-1], list(values)[:20][::-1]
-    fig, ax = plt.subplots(figsize=(6.5, max(3, 0.32 * len(names))))
+    names = [_short_label(n) for n in names][:20][::-1]
+    values = list(values)[:20][::-1]
+    fig, ax = plt.subplots(figsize=(7, max(3, 0.32 * len(names))))
     ax.barh(names, values, color="#3b7dd8")
     ax.set_xlabel("Importance")
     ax.set_title(title)
