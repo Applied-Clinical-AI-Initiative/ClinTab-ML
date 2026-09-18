@@ -398,6 +398,15 @@ function showConfirm(title, message, okLabel = "Delete") {
   });
 }
 
+let trainES = null;
+function setTrainingActive(active) {
+  // cancel replaces start in the same slot, rather than sitting next to a
+  // disabled start button and crowding the progress bar
+  $("trainBtn").style.display = active ? "none" : "";
+  $("trainBtn").disabled = false;
+  $("cancelTrainBtn").style.display = active ? "" : "none";
+  $("trainBarWrap").classList.toggle("running", active);
+}
 $("trainBtn").addEventListener("click", startTraining);
 async function startTraining() {
   const outcome = $("outcomeSel").value;
@@ -412,7 +421,8 @@ async function startTraining() {
   const grids = {};
   models.forEach(m => { const t = $("grid_" + m); if (t) { try { grids[m] = JSON.parse(t.value); } catch (e) {} } });
 
-  $("trainBtn").disabled = true; $("trainLog").style.display = "block"; $("trainLog").textContent = "";
+  setTrainingActive(true);
+  $("trainLog").style.display = "block"; $("trainLog").textContent = "";
   $("trainResults").style.display = "none"; setBar(0);
 
   const cfg = await jpost("/api/train", {
@@ -420,11 +430,12 @@ async function startTraining() {
     scoring: $("scoreSel").value, grid_search: $("gridToggle").checked,
     smote: $("smoteTrain").checked, threshold: +$("thrInput").value
   });
-  if (cfg.error) { toast(cfg.error, "err"); $("trainBtn").disabled = false; return; }
+  if (cfg.error) { toast(cfg.error, "err"); setTrainingActive(false); return; }
 
   const metricsRows = [], impWrap = $("importanceWrap"); impWrap.innerHTML = "";
   let metricKeys = null;
   const es = new EventSource("/api/train/stream");
+  trainES = es;
   es.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
     if (m.event === "start") log(`▶ Training ${m.n_models} model(s) · ${m.features} features · task=${m.task}`);
@@ -441,7 +452,8 @@ async function startTraining() {
            <button class="ghost sm" onclick='dlImpCsv(${JSON.stringify(JSON.stringify(m.importance))},"${m.model}_importance.csv")'>CSV</button></div>`));
       }
     } else if (m.event === "complete") {
-      es.close(); $("trainBtn").disabled = false; setBar(100);
+      es.close(); trainES = null;
+      setTrainingActive(false); setBar(100);
       const nOk = m.results.length, nTotal = models.length;
       if (nOk > 0) {
         renderValMetrics(metricKeys, metricsRows);
@@ -455,7 +467,20 @@ async function startTraining() {
       showTrainDone(nOk, nTotal);
     }
   };
-  es.onerror = () => { es.close(); $("trainBtn").disabled = false; toast("Training stream error.", "err"); };
+  es.onerror = () => {
+    es.close(); trainES = null;
+    setTrainingActive(false);
+    toast("Training stream error.", "err");
+  };
+}
+function cancelTraining() {
+  if (!trainES) return;
+  trainES.close();
+  trainES = null;
+  log("✕ Cancelled. A model already mid-fit on the server may still finish and save on its own; " +
+      "no further models in this run will start.");
+  toast("Training cancelled.", "");
+  setTrainingActive(false);
 }
 function showTrainDone(nOk, nTotal) {
   const modal = $("trainDoneModal"), icon = $("trainDoneIcon"), failed = nOk === 0;
@@ -876,6 +901,65 @@ $("clearAllBtn").addEventListener("click", async () => {
   loadDatasetList();
   toast("All data cleared.", "ok");
 });
+
+// =====================================================================
+// Drag-to-select for checklist grids (model pick/delete, model training list).
+// Click-to-toggle one at a time still works as before; this adds
+// click-and-drag across a grid of checkboxes to select/deselect a whole
+// run of them in one motion, so deleting a big batch of saved models
+// doesn't mean clicking every single one.
+// =====================================================================
+function enableDragSelect(container) {
+  if (!container || container._dragSelectBound) return;
+  container._dragSelectBound = true;
+
+  let dragging = false, dragValue = true, suppressClick = null;
+
+  function checkboxFromNode(node) {
+    const label = node && node.closest ? node.closest("label") : null;
+    if (!label || !container.contains(label)) return null;
+    return label.querySelector('input[type="checkbox"]');
+  }
+  function setChecked(cb, value) {
+    suppressClick = cb;
+    if (!cb || cb.disabled || cb.checked === value) return;
+    cb.checked = value;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  container.addEventListener("mousedown", (e) => {
+    if (e.button !== 0) return;
+    const cb = checkboxFromNode(e.target);
+    if (!cb) return;
+    dragging = true;
+    dragValue = !cb.checked;
+    setChecked(cb, dragValue);
+    container.classList.add("drag-active");
+    document.body.style.userSelect = "none";
+  });
+
+  // We drive the checked state ourselves on mousedown/mousemove so a drag
+  // can span many boxes in one gesture; without this, the browser's own
+  // click-driven toggle right after would flip the last box back.
+  container.addEventListener("click", (e) => {
+    const cb = checkboxFromNode(e.target);
+    if (cb && cb === suppressClick) { e.preventDefault(); suppressClick = null; }
+  }, true);
+
+  document.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const cb = checkboxFromNode(document.elementFromPoint(e.clientX, e.clientY));
+    if (cb) setChecked(cb, dragValue);
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    container.classList.remove("drag-active");
+    document.body.style.userSelect = "";
+  });
+}
+["modelList", "modelPickList"].forEach(id => enableDragSelect($(id)));
 
 // restore session tag on load
 jget("/api/session").then(d => applySessionMeta(d.active ? d.meta : null));
