@@ -337,8 +337,11 @@ def train_config():
     meta = store.load_meta(sid)
 
     outcome = body["outcome"]
-    df_head = pd.read_csv(store.session_path(sid, "train.csv"), nrows=200)
-    task = ml.determine_task(df_head[outcome])
+    # Read the whole outcome column, not a head sample: task detection counts
+    # distinct values, and a few hundred rows can show <=10 for a continuous
+    # outcome (e.g. length of stay), misclassifying it as multiclass.
+    outcome_col = pd.read_csv(store.session_path(sid, "train.csv"), usecols=[outcome])[outcome]
+    task = ml.determine_task(outcome_col)
 
     cfg = {
         "outcome": outcome,
