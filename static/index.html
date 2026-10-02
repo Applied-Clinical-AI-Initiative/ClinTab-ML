@@ -102,8 +102,12 @@
   .pill.not_found{background:#fdeceb;color:#a83a2c}
   .pill.not_applicable{background:#eef1f4;color:#5b6673}
   .pill.manual_review{background:#fdf0e3;color:#a86511}
-  .disclaimer{border-left:3px solid var(--warn);padding:8px 12px;background:#fdf6ec;
-    border-radius:0 6px 6px 0;font-size:12px;color:var(--ink)}
+  .disclaimer{display:flex;align-items:flex-start;gap:9px;border-left:3px solid var(--warn);
+    padding:10px 12px;background:#fdf6ec;border-radius:0 8px 8px 0;font-size:12px;
+    line-height:1.55;color:var(--ink)}
+  .disclaimer .disc-icon{flex:0 0 auto;width:16px;height:16px;margin-top:2px;color:var(--warn)}
+  .disclaimer .disc-icon svg{width:100%;height:100%;display:block}
+  .disclaimer .disc-text{flex:1}
   .paper{background:#fff;border:1px solid var(--line);border-radius:3px;
     box-shadow:0 1px 4px rgba(20,30,45,.08);padding:30px 38px;max-width:680px}
   .paper h4{font:600 11px/1 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
@@ -124,6 +128,8 @@
   .train-done-icon{width:48px;height:48px;border-radius:50%;background:#e8f6ee;color:var(--ok);
     font-size:26px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
   .train-done-icon.err{background:#fdeceb;color:var(--err)}
+  .train-done-icon.warn{background:#fdf0e3;color:var(--warn)}
+  .train-done-icon svg{width:24px;height:24px}
   .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
   .card{background:#f7fafd;border:1px solid var(--line);border-radius:9px;padding:14px}
   .card .big{font-size:24px;font-weight:700;color:var(--brand-d)}
@@ -138,9 +144,24 @@
   @keyframes barsweep{0%{left:-35%}100%{left:100%}}
   .log{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0f1c2b;color:#cfe0f0;
        border-radius:8px;padding:10px;max-height:160px;overflow:auto;white-space:pre-wrap}
-  .toast{position:fixed;right:18px;bottom:18px;background:#16283d;color:#fff;padding:12px 16px;
-         border-radius:8px;font-size:13px;max-width:360px;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:50}
-  .toast.err{background:var(--err)} .toast.ok{background:var(--ok)}
+  .toast{position:fixed;right:18px;bottom:18px;display:flex;align-items:flex-start;gap:10px;
+         background:#fff;color:var(--ink);padding:13px 34px 13px 14px;border-radius:10px;
+         font-size:13px;line-height:1.45;max-width:360px;z-index:50;
+         border-left:4px solid var(--brand);
+         box-shadow:0 12px 28px rgba(15,25,40,.16),0 2px 8px rgba(15,25,40,.08);
+         opacity:0;transform:translateY(10px) scale(.98);pointer-events:none;
+         transition:opacity .2s ease,transform .2s ease}
+  .toast.show{opacity:1;transform:translateY(0) scale(1);pointer-events:auto}
+  .toast .toast-icon{flex:0 0 auto;width:22px;height:22px;border-radius:50%;
+         display:flex;align-items:center;justify-content:center;background:#e7f0fb;color:var(--brand)}
+  .toast .toast-icon svg{width:13px;height:13px}
+  .toast .toast-msg{flex:1;padding-top:2px}
+  .toast .toast-close{position:absolute;top:8px;right:8px;border:none;background:none;
+         color:var(--muted);font-size:15px;line-height:1;cursor:pointer;padding:4px}
+  .toast .toast-close:hover{color:var(--ink)}
+  .toast.ok{border-left-color:var(--ok)} .toast.ok .toast-icon{background:#e8f6ee;color:var(--ok)}
+  .toast.err{border-left-color:var(--err)} .toast.err .toast-icon{background:#fdeceb;color:var(--err)}
+  .toast.warn{border-left-color:var(--warn)} .toast.warn .toast-icon{background:#fdf0e3;color:var(--warn)}
   img.plot{max-width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
   .plotwrap{display:inline-block;margin:8px 12px 8px 0;vertical-align:top}
   .test-model-group{border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-bottom:14px;background:#fbfcfe}
@@ -590,10 +611,11 @@
   </div>
 </div>
 <div class="modal-overlay center" id="trainWarnModal">
-  <div class="panel" style="max-width:420px;width:100%;margin:0">
-    <h3 style="margin-top:0">Large dataset</h3>
+  <div class="panel" style="max-width:420px;width:100%;margin:0;text-align:center">
+    <div class="train-done-icon warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+    <h3 style="margin:0 0 6px">Large dataset</h3>
     <p class="muted" id="trainWarnMsg" style="margin:0 0 20px"></p>
-    <div class="flex" style="justify-content:flex-end">
+    <div class="flex" style="justify-content:center">
       <button class="ghost" id="trainWarnCancel">Cancel</button>
       <button id="trainWarnProceed">Proceed with training</button>
     </div>
