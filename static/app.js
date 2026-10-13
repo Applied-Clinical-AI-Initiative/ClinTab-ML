@@ -9,9 +9,24 @@ const State = { columns: [], coltypes: {}, confirmed: false, lastTrain: null };
 const $ = (id) => document.getElementById(id);
 const el = (tag, props = {}, html) => { const e = document.createElement(tag);
   Object.assign(e, props); if (html != null) e.innerHTML = html; return e; };
+const TOAST_ICONS = {
+  ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></svg>',
+  err: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12.5"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  "": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="7.5" x2="12.01" y2="7.5"/></svg>',
+};
 function toast(msg, kind = "") {
-  const t = $("toast"); t.className = "toast " + kind; t.textContent = msg; t.style.display = "block";
-  clearTimeout(toast._t); toast._t = setTimeout(() => t.style.display = "none", 5200);
+  const t = $("toast");
+  t.className = "toast " + kind;
+  t.innerHTML = `<span class="toast-icon">${TOAST_ICONS[kind] || TOAST_ICONS[""]}</span>
+    <span class="toast-msg"></span>
+    <button class="toast-close" type="button" aria-label="Dismiss">&times;</button>`;
+  t.querySelector(".toast-msg").textContent = msg;
+  requestAnimationFrame(() => t.classList.add("show"));
+  clearTimeout(toast._t);
+  const hide = () => t.classList.remove("show");
+  t.querySelector(".toast-close").onclick = () => { clearTimeout(toast._t); hide(); };
+  toast._t = setTimeout(hide, 5200);
 }
 function showBusy(msg, sub, withBar) {
   $("busyMsg").textContent = msg || "Working…"; $("busySub").textContent = sub || "";
@@ -129,7 +144,7 @@ function handleFile(file) {
     if (!e.lengthComputable) return;
     const p = Math.round(100 * e.loaded / e.total);
     setBusyBar(p);
-    if (p >= 100) busyMsg("Processing on server…", "detecting column types (stays on your machine)");
+    if (p >= 100) busyMsg("Reading your file…", "detecting column types (stays on your machine)");
   };
   xhr.onload = () => {
     hideBusy();
@@ -236,7 +251,7 @@ $("confirmBtn").addEventListener("click", async () => {
   document.querySelector('[data-tab="upload"]').classList.add("done");
   $("confirmMsg").innerHTML = `<span class="ok-text">Locked.</span> train ${d.n_train} · val ${d.n_val} · test ${d.n_test} (${d.method})`;
   if (d.smote_hint && d.smote_hint.suggest_smote)
-    toast(`Minority class ${(d.smote_hint.minority_fraction*100).toFixed(1)}% — SMOTE recommended.`, "");
+    toast(`Minority class ${(d.smote_hint.minority_fraction*100).toFixed(1)}%, SMOTE recommended.`, "warn");
   toast("Dataset confirmed and saved.", "ok");
   document.querySelector('[data-tab="summary"]').click();
 });
@@ -807,7 +822,8 @@ function closeMethodsModal() {
 async function loadTripodReport() {
   const d = await jget("/api/report/tripod");
   if (d.error) { toast(d.error, "err"); return; }
-  $("tripodDisclaimer").textContent = d.disclaimer;
+  $("tripodDisclaimer").innerHTML = `<span class="disc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3L12 3z"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span class="disc-text"></span>`;
+  $("tripodDisclaimer").querySelector(".disc-text").textContent = d.disclaimer;
   const s = d.summary;
   $("tripodSummary").innerHTML = [
     ["Found", s.found], ["Not found", s.not_found],
@@ -890,6 +906,18 @@ async function deleteDataset(sid, label) {
   toast("Dataset deleted.", "ok");
 }
 
+function resetUploadTab() {
+  State.columns = []; State.coltypes = {}; State.confirmed = false; State.lastTrain = null;
+  fileInput.value = "";
+  $("uploadInfo").textContent = "";
+  $("previewPanel").style.display = "none";
+  $("typePanel").style.display = "none"; $("splitPanel").style.display = "none";
+  $("previewTable").innerHTML = ""; $("typeTable").innerHTML = "";
+  $("confirmMsg").textContent = "";
+  $("smoteBox").style.display = "none";
+  $("stratCol").innerHTML = `<option value="">— none —</option>`;
+}
+
 $("clearAllBtn").addEventListener("click", async () => {
   const ok = await showConfirm("Clear all data?",
     "This permanently deletes every uploaded dataset on this machine. This cannot be undone.", "Clear all data");
@@ -897,8 +925,10 @@ $("clearAllBtn").addEventListener("click", async () => {
   const r = await fetch("/api/sessions", { method: "DELETE" }).then(r => r.json());
   if (r.error) { toast(r.error, "err"); return; }
   applySessionMeta(null);
-  document.querySelector('[data-tab="upload"]').classList.remove("done");
+  resetUploadTab();
+  document.querySelectorAll(".nav a.done").forEach(a => a.classList.remove("done"));
   loadDatasetList();
+  document.querySelector('[data-tab="overview"]').click();
   toast("All data cleared.", "ok");
 });
 
