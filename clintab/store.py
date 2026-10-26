@@ -1,6 +1,6 @@
 """store.py
 Filesystem layout + session metadata helpers. Knows nothing about Flask or
-sklearn -- just paths and JSON. Keeps the data-saving clean and in one place.
+sklearn, just paths and JSON. Keeps the data-saving clean and in one place.
 
 Layout (all created automatically on first use):
 
@@ -18,11 +18,14 @@ Layout (all created automatically on first use):
 """
 import json
 import os
+import re
 import shutil
 import time
 import uuid
 
-BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# clintab_home moves all generated data (the desktop app points it at the
+# user's app data folder). default is the repo root.
+BASE = os.environ.get("CLINTAB_HOME") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME = os.path.join(BASE, "runtime")
 SESSIONS = os.path.join(RUNTIME, "sessions")
 EXPORTS = os.path.join(RUNTIME, "exports")
@@ -34,11 +37,31 @@ def ensure_dirs():
         os.makedirs(d, exist_ok=True)
 
 
+_SID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
 def new_session_id():
     return uuid.uuid4().hex[:12]
 
 
+def safe_name(name, max_len=120):
+    """File-system safe version of a model/export name."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name))[:max_len]
+
+
+def model_base_name(model, outcome, ts):
+    """<model>_<outcome>_<timestamp>. The prefix is trimmed, the timestamp never
+    is, so a long outcome name can't make two runs overwrite each other."""
+    return f"{safe_name(f'{model}_{outcome}', max_len=60)}_{ts}"
+
+
+def valid_session_id(session_id):
+    return isinstance(session_id, str) and _SID_RE.fullmatch(session_id) is not None
+
+
 def session_dir(session_id, create=False):
+    if not valid_session_id(session_id):
+        raise ValueError(f"Invalid session id: {session_id!r}")
     d = os.path.join(SESSIONS, session_id)
     if create:
         os.makedirs(d, exist_ok=True)
@@ -64,13 +87,19 @@ def load_meta(session_id):
 
 
 def session_exists(session_id):
-    return bool(session_id) and os.path.exists(session_path(session_id, "meta.json"))
+    return valid_session_id(session_id) and os.path.exists(session_path(session_id, "meta.json"))
+
+
+def _session_ids():
+    """Session folders only, a stray file like .DS_Store isn't one."""
+    return [sid for sid in os.listdir(SESSIONS)
+            if valid_session_id(sid) and os.path.isdir(os.path.join(SESSIONS, sid))]
 
 
 def list_sessions():
     ensure_dirs()
     out = []
-    for sid in os.listdir(SESSIONS):
+    for sid in _session_ids():
         meta = load_meta(sid)
         if meta:
             out.append({"session_id": sid, **meta})
@@ -85,16 +114,16 @@ def delete_session(session_id):
 
 def delete_all_sessions():
     ensure_dirs()
-    for sid in os.listdir(SESSIONS):
+    for sid in _session_ids():
         delete_session(sid)
 
 
 def model_path(name):
-    return os.path.join(MODELS, name + ".pkl")
+    return os.path.join(MODELS, safe_name(name) + ".pkl")
 
 
 def model_meta_path(name):
-    return os.path.join(MODELS, name + ".meta.json")
+    return os.path.join(MODELS, safe_name(name) + ".meta.json")
 
 
 def model_exists(name):

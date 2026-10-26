@@ -1,9 +1,11 @@
 """ml.py
 All the sklearn: preprocessing, the 15 models, validation-set grid search,
 optional SMOTE on the training fold only, metrics, feature importance, and
-single-row prediction. Knows nothing about Flask -- everything takes/returns
+single-row prediction. Knows nothing about Flask, everything takes/returns
 plain DataFrames, dicts and numpy arrays so it can be tested in isolation.
 """
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -11,7 +13,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import (
-    OneHotEncoder, StandardScaler, LabelEncoder, label_binarize,
+    OneHotEncoder, StandardScaler, label_binarize,
 )
 from sklearn.model_selection import GridSearchCV, PredefinedSplit
 from sklearn.inspection import permutation_importance
@@ -30,7 +32,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.metrics import (
     roc_auc_score, average_precision_score, roc_curve, precision_recall_curve,
     confusion_matrix, f1_score, fbeta_score, brier_score_loss, make_scorer,
-    recall_score, precision_score, accuracy_score, balanced_accuracy_score,
+    accuracy_score, balanced_accuracy_score,
     mean_absolute_error, mean_squared_error, r2_score, auc,
 )
 from sklearn.calibration import calibration_curve
@@ -44,7 +46,7 @@ except Exception:                                   # pragma: no cover
 
 
 # ============================================================================
-# 1. Task detection + model catalogue
+# 1. task detection + model catalogue
 # ============================================================================
 def determine_task(series):
     """binary | multiclass | continuous, from the outcome column."""
@@ -54,16 +56,14 @@ def determine_task(series):
         return "binary"
     if pd.api.types.is_numeric_dtype(s) and n_unique > 10:
         return "continuous"
-    if n_unique <= 10:
-        return "multiclass"
-    return "continuous"
+    return "multiclass"
 
 
 def model_catalogue(task):
     """The 15 models + sensible default grids, filtered by task."""
     if task in ("binary", "multiclass"):
-        # liblinear only fits an OvR scheme and raises on n_classes >= 3 in
-        # current sklearn -- fall back to saga (also supports l1) there.
+        # liblinear only fits an ovr scheme and raises on n_classes >= 3 in
+        # current sklearn, fall back to saga (also supports l1) there.
         lasso_solver = "saga" if task == "multiclass" else "liblinear"
         lasso_max_iter = 3000 if task == "multiclass" else 2000
         return {
@@ -134,7 +134,7 @@ def default_grids(task):
 
 
 # ============================================================================
-# 2. Preprocessing
+# 2. preprocessing
 # ============================================================================
 def feature_columns(df, outcome, exclude):
     exclude = set(exclude or [])
@@ -179,17 +179,47 @@ def build_preprocessor(df, feat_cols, coltypes=None, scale=True):
     return pre, num, cat
 
 
-def encode_outcome(series, task):
-    """Returns (y, classes) for classification or (y, None) for regression."""
+def _norm_label(value):
+    """Label as a string, with 1.0 and 1 treated as the same class (a column
+    reads as float when it has missing values and as int when it doesn't).
+    Other strings, "01" for one, are left alone."""
+    text = str(value)
+    return re.sub(r"^(-?\d+)\.0+$", r"\1", text)
+
+
+def encode_outcome(series, task, classes=None):
+    """Returns (y, classes) for classification or (y, None) for regression.
+
+    Missing outcomes stay NaN (y is then a float array) instead of turning
+    into an extra "nan" class. Pass the classes a model was trained with to
+    get the same label coding on a validation/test set that happens to be
+    missing one of them; labels that were never seen in training become NaN.
+    """
     if task == "continuous":
         return pd.to_numeric(series, errors="coerce").values, None
-    le = LabelEncoder()
-    y = le.fit_transform(series.astype(str))
-    return y, list(le.classes_)
+    labels = {v: _norm_label(v) for v in series.dropna().unique()}
+    if classes is None:
+        classes = sorted(set(labels.values()))
+    index = {_norm_label(c): i for i, c in enumerate(classes)}
+    code = {v: index.get(lab, np.nan) for v, lab in labels.items()}
+    y = series.map(code).to_numpy(dtype=float)
+    if not np.isnan(y).any():
+        y = y.astype(int)
+    return y, list(classes)
+
+
+def _drop_missing_outcome(X, y, task):
+    """Rows with a missing outcome can't be scored or fit; classification
+    labels go back to int once the NaNs are gone."""
+    keep = ~pd.isna(y)
+    y = y[keep]
+    if task != "continuous":
+        y = y.astype(int)
+    return X[keep], y
 
 
 # ============================================================================
-# 3. Scorers
+# 3. scorers
 # ============================================================================
 def make_scoring(metric, task):
     if task == "continuous":
@@ -199,7 +229,7 @@ def make_scoring(metric, task):
             "rmse": "neg_root_mean_squared_error",
         }.get(metric, "r2")
     # sklearn's plain "roc_auc"/"recall"/"precision" scorers assume a binary
-    # outcome (average="binary") and raise ValueError on a multiclass one --
+    # outcome (average="binary") and raise valueerror on a multiclass one,
     # route those to their multiclass-safe equivalents instead.
     average = "macro" if task == "multiclass" else "binary"
     if metric == "f2":
@@ -224,7 +254,7 @@ def make_scoring(metric, task):
 
 
 # ============================================================================
-# 4. Train one model
+# 4. train one model
 # ============================================================================
 def train_one_model(name, df_train, df_val, outcome, feat_cols, task,
                     param_grid=None, scoring="roc", use_smote=False,
@@ -240,7 +270,7 @@ def train_one_model(name, df_train, df_val, outcome, feat_cols, task,
     params. Useful on small datasets, where scoring candidates against a
     single validation split makes hyperparameter selection noisy. Either
     way, df_val is never touched by the search itself, only by the
-    evaluate() call afterwards -- so the validation metrics stay leakage-free
+    evaluate() call afterwards, so the validation metrics stay leakage-free
     regardless of which path is used.
 
     Returns (fitted_pipeline, info_dict).
@@ -260,27 +290,26 @@ def train_one_model(name, df_train, df_val, outcome, feat_cols, task,
 
     Xtr, Xva = df_train[feat_cols], df_val[feat_cols]
     ytr, classes = encode_outcome(df_train[outcome], task)
-    yva, _ = encode_outcome(df_val[outcome], task)
+    yva, _ = encode_outcome(df_val[outcome], task, classes)
 
     # drop rows with missing outcome
-    mtr, mva = ~pd.isna(ytr), ~pd.isna(yva)
-    Xtr, ytr = Xtr[mtr], ytr[mtr]
-    Xva, yva = Xva[mva], yva[mva]
+    Xtr, ytr = _drop_missing_outcome(Xtr, ytr, task)
+    Xva, yva = _drop_missing_outcome(Xva, yva, task)
 
     score = make_scoring(scoring, task)
     best_params = "default"
 
     if do_grid_search and grid and cv_folds:
-        # k-fold CV within the TRAINING set only -- df_val is never part of
+        # k-fold cv within the training set only, df_val is never part of
         # the search, so it stays a clean held-out set for evaluate() later.
         gs = GridSearchCV(pipe, grid, scoring=score, cv=cv_folds, n_jobs=-1, refit=True)
         gs.fit(Xtr, ytr)
         best_params = gs.best_params_
         fitted = gs.best_estimator_
     elif do_grid_search and grid:
-        # Grid search scores each candidate on the VALIDATION set only
-        # (PredefinedSplit: fold -1 = train, fold 0 = val). refit=False so the
-        # winning params are then re-fit on the TRAINING set alone -- this keeps
+        # grid search scores each candidate on the validation set only
+        # (predefinedsplit: fold -1 = train, fold 0 = val). refit off so the
+        # winning params are then re-fit on the training set alone, this keeps
         # the validation metrics we report afterwards honest (no leakage).
         X_all = pd.concat([Xtr, Xva], axis=0)
         y_all = np.concatenate([ytr, yva])
@@ -299,6 +328,7 @@ def train_one_model(name, df_train, df_val, outcome, feat_cols, task,
             "classes": classes, "task": task,
             "n_train": int(len(Xtr)), "n_val": int(len(Xva)),
             "smote": bool(use_smote and task != "continuous" and HAS_SMOTE),
+            "tuned": bool(do_grid_search and grid),
             "cv_folds": int(cv_folds) if (do_grid_search and grid and cv_folds) else None}
     return fitted, info
 
@@ -311,7 +341,7 @@ def _jsonable(p):
 
 
 # ============================================================================
-# 5. Metrics + plot coordinates
+# 5. metrics + plot coordinates
 # ============================================================================
 def predict_scores(pipe, X, task):
     """Probability of positive class (binary) / predicted value (regression)."""
@@ -391,12 +421,17 @@ def multiclass_metrics(y_true, y_pred, y_proba=None):
 
     coords = {}
     if y_proba is not None:
-        classes = np.unique(y_true)
+        y_proba = np.asarray(y_proba)
+        # one column of y_proba per class the model was trained on, whether or
+        # not every class shows up in y_true
+        classes = np.arange(y_proba.shape[1])
         y_bin = label_binarize(y_true, classes=classes)
         if y_bin.shape[1] == 1:
             y_bin = np.hstack([1 - y_bin, y_bin])
         roc_series, pr_series = [], []
         for i, cls in enumerate(classes):
+            if y_bin[:, i].sum() in (0, len(y_bin)):
+                continue                      # class absent (or alone) in this data
             fpr, tpr, _ = roc_curve(y_bin[:, i], y_proba[:, i])
             prec, rec, _ = precision_recall_curve(y_bin[:, i], y_proba[:, i])
             roc_series.append({"name": f"class {cls}", "fpr": fpr.tolist(),
@@ -410,12 +445,12 @@ def multiclass_metrics(y_true, y_pred, y_proba=None):
     return metrics, coords
 
 
-def evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5):
-    """Metrics + plot coordinates on an arbitrary dataframe."""
+def evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5, classes=None):
+    """Metrics + plot coordinates on an arbitrary dataframe. classes: the
+    class list the model was trained with (info["classes"])."""
     X = df[feat_cols]
-    y, _ = encode_outcome(df[outcome], task)
-    mask = ~pd.isna(y)
-    X, y = X[mask], y[mask]
+    y, _ = encode_outcome(df[outcome], task, classes)
+    X, y = _drop_missing_outcome(X, y, task)
     if task == "binary":
         scores = predict_scores(pipe, X, task)
         return binary_metrics(y, scores, threshold)
@@ -428,7 +463,7 @@ def evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5):
 
 
 # ============================================================================
-# 6. Feature importance
+# 6. feature importance
 # ============================================================================
 def _feature_names(pipe, feat_cols):
     try:
@@ -437,7 +472,7 @@ def _feature_names(pipe, feat_cols):
         return list(feat_cols)
 
 
-def feature_importance(pipe, df_val, outcome, feat_cols, task):
+def feature_importance(pipe, df_val, outcome, feat_cols, task, classes=None):
     """Return a DataFrame [feature, importance] sorted descending.
     Uses coef_ / feature_importances_ when available, else permutation."""
     clf = pipe.named_steps["clf"]
@@ -460,27 +495,26 @@ def feature_importance(pipe, df_val, outcome, feat_cols, task):
 
     # fallback: permutation importance on the validation set
     X = df_val[feat_cols]
-    y, _ = encode_outcome(df_val[outcome], task)
-    mask = ~pd.isna(y)
+    y, _ = encode_outcome(df_val[outcome], task, classes)
+    X, y = _drop_missing_outcome(X, y, task)
     scoring = "r2" if task == "continuous" else "roc_auc" if task == "binary" else "accuracy"
-    r = permutation_importance(pipe, X[mask], y[mask], n_repeats=5,
+    r = permutation_importance(pipe, X, y, n_repeats=5,
                                random_state=42, scoring=scoring)
     return (pd.DataFrame({"feature": feat_cols, "importance": r.importances_mean})
             .sort_values("importance", ascending=False)
             .reset_index(drop=True))
 
 
-def feature_outcome_correlations(df, outcome, feat_cols, task):
+def feature_outcome_correlations(df, outcome, feat_cols, task, classes=None):
     """Pearson correlation coefficient between each numeric feature and the
     outcome, on this dataframe. Only meaningful for binary (0/1-encoded, so
-    this is really a point-biserial correlation) or continuous outcomes --
-    multiclass labels have no inherent order, so a Pearson r against them
+    this is really a point-biserial correlation) or continuous outcomes,     multiclass labels have no inherent order, so a Pearson r against them
     isn't statistically meaningful and callers should skip this for
     multiclass. Non-numeric or constant-valued features are skipped, since
     Pearson only applies to a linear numeric relationship.
     Returns a DataFrame [feature, pearson_r] sorted by |pearson_r| descending.
     """
-    y, _ = encode_outcome(df[outcome], task)
+    y, _ = encode_outcome(df[outcome], task, classes)
     y = pd.Series(y, index=df.index)
 
     rows = []
@@ -501,7 +535,7 @@ def feature_outcome_correlations(df, outcome, feat_cols, task):
 
 
 # ============================================================================
-# 7. Single-row prediction
+# 7. single-row prediction
 # ============================================================================
 def predict_single(pipe, row_dict, feat_cols, task, classes=None):
     """row_dict: {feature: value}. Returns probability/value + explanation."""

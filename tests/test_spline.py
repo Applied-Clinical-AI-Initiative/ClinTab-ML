@@ -24,7 +24,7 @@ def test_fit_rcs_returns_curve_with_expected_shape():
     assert len(res["logodds"]) == len(res["x"])
     assert len(res["lower"]) == len(res["x"])
     assert len(res["upper"]) == len(res["x"])
-    # CI should bracket the point estimate everywhere
+    # ci should bracket the point estimate everywhere
     assert all(lo <= m <= hi for lo, m, hi in
                zip(res["lower"], res["logodds"], res["upper"]))
 
@@ -40,3 +40,25 @@ def test_fit_rcs_rejects_non_binary_outcome():
     df["outcome"] = pd.Series(["a", "b", "c"] * (len(df) // 3 + 1))[:len(df)]
     with pytest.raises(ValueError):
         spline.fit_rcs(df, "age", "outcome", n_knots=4)
+
+
+def test_fit_rcs_curve_is_on_the_log_odds_scale_not_probability():
+    df = _binary_outcome_frame(n=600)
+    res = spline.fit_rcs(df, "age", "outcome", n_knots=4)
+    logodds = np.array(res["logodds"])
+    # a probability curve would sit inside [0, 1] everywhere, log-odds here
+    # runs well below 0 at young ages and above 0 at old ages
+    assert logodds.min() < -0.5 and logodds.max() > 0.5
+    # and it should be the logit of the model's own fitted probabilities
+    assert np.all(np.diff(np.sign(logodds)) >= 0)    # crosses zero once, going up
+
+
+def test_fit_rcs_reports_the_number_of_knots_actually_used():
+    rng = np.random.RandomState(0)
+    n = 400
+    # 70% of the predictor sits on one value, so several quantile knots tie
+    x = np.where(rng.uniform(size=n) < 0.7, 5.0, rng.uniform(0, 10, size=n))
+    df = pd.DataFrame({"x": x, "y": (rng.uniform(size=n) < 1 / (1 + np.exp(-(x - 5) / 2))).astype(int)})
+    res = spline.fit_rcs(df, "x", "y", n_knots=5)
+    assert len(res["knots"]) == 3
+    assert res["n_knots"] == 3

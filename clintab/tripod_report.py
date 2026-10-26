@@ -1,15 +1,15 @@
 """tripod_report.py
 Maps a session's analysis log onto the reporting domains of TRIPOD+AI
-(Collins et al., BMJ 2024) -- the reporting guideline for studies developing
+(Collins et al., BMJ 2024), the reporting guideline for studies developing
 or validating clinical prediction models, including ones built with machine
 learning.
 
 Important: this is a practical subset of TRIPOD+AI's reporting domains, not
-a verbatim reproduction of all 27 official checklist items -- treat it as a
+a verbatim reproduction of all 27 official checklist items, treat it as a
 starting point, not a substitute for the published checklist. And for every
 item, "evidence found" only means the underlying analysis step is traceable
 in this session's log. It does NOT mean the manuscript actually reports it
-correctly, or at all -- narrative items (rationale, limitations, clinical
+correctly, or at all, narrative items (rationale, limitations, clinical
 interpretation, and so on) can't be verified from a log no matter what, and
 are flagged for manual review rather than guessed at.
 
@@ -19,7 +19,7 @@ from clintab import analysis_log
 
 DISCLAIMER = (
     "This report checks what this session's analysis log can prove was "
-    "actually run -- it is not an official TRIPOD+AI compliance check, and "
+    "actually run. It is not an official TRIPOD+AI compliance check, and "
     "'evidence found' does not mean your manuscript reports an item "
     "correctly (or at all). Items marked 'manual review' are narrative "
     "content a log can never verify. Always check the published TRIPOD+AI "
@@ -119,9 +119,9 @@ def _check_class_imbalance(entries):
     return "not_found" if imbalance_flagged else "not_applicable"
 
 
-# Each item: id, section, a description in our own words (not verbatim
-# official TRIPOD+AI text), and either a check(entries) -> 'found' |
-# 'not_found' | 'not_applicable', or check=None for narrative items no log
+# each item: id, section, a description in our own words (not verbatim
+# official tripod+ai text), and either a check(entries) -> 'found' |
+# 'not_found' | 'not_applicable', or no check function for narrative items no log
 # can ever verify (flagged 'manual_review' instead).
 _CHECKLIST = [
     {"id": "title_identifies_study_type", "section": "Title & Abstract",

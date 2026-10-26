@@ -1,7 +1,7 @@
 """methods_text.py
 Deterministic methods-section text, assembled from a session's analysis log
 (clintab/analysis_log.py). Every sentence comes from a fixed template filled
-in with structured log fields -- there is no generative/LLM call anywhere in
+in with structured log fields, there is no generative/LLM call anywhere in
 here, so the same log always produces the exact same text, and the wording
 is defensible to paste into a manuscript. Pure Python, no Flask.
 """
@@ -10,7 +10,7 @@ from clintab import analysis_log
 _METRIC_ORDER = ["AUROC", "AUPRC", "Accuracy", "BalancedAccuracy", "MacroF1",
                  "R2", "RMSE", "MAE"]
 
-# Internal scoring keys (clintab/ml.py, static/app.js #scoreSel) rendered as
+# internal scoring keys (clintab/ml.py, the scoring dropdown in static/app.js) rendered as
 # the terms a manuscript would actually use, spelling out acronyms on first
 # use per standard scientific-writing convention.
 _SCORING_LABELS = {
@@ -28,8 +28,12 @@ _SCORING_LABELS = {
 
 
 def _article(word):
-    """'A' or 'An', by the leading sound of word (e.g. 'An ElasticNet')."""
-    return "An" if word and word[0].upper() in "AEIOU" else "A"
+    """'A' or 'An', by the leading sound of word (e.g. 'An ElasticNet').
+    All-caps acronyms are read letter by letter, so 'An SVM' but 'A KNN'."""
+    if not word:
+        return "A"
+    vowel_sounds = "AEIOUFHLMNRSX" if word.isupper() and len(word) > 1 else "AEIOU"
+    return "An" if word[0].upper() in vowel_sounds else "A"
 
 
 def _scoring_label(key):
@@ -77,10 +81,22 @@ def _sentence_train_model(e):
     tuning = (f"{cv_folds}-fold cross-validation on the training set" if cv_folds
               else "a held-out validation set")
     smote_clause = ", with SMOTE applied to the training fold," if i.get("smote") else ""
+    # logs from before "tuned" was recorded always came from a tuned run
+    if i.get("tuned", True):
+        fit_clause = (f"hyperparameters tuned by {_scoring_label(i.get('scoring'))} "
+                      f"scoring against {tuning}")
+    else:
+        fit_clause = "default hyperparameters and no tuning"
     return (f"{_article(model)} {model} model was trained to predict "
-            f"{i.get('outcome', 'the outcome')}{smote_clause} with hyperparameters "
-            f"tuned by {_scoring_label(i.get('scoring'))} scoring against "
-            f"{tuning}{_format_metrics(o.get('metrics'))}.")
+            f"{i.get('outcome', 'the outcome')}{smote_clause} with {fit_clause}"
+            f"{_format_metrics(o.get('metrics'))}.")
+
+
+def _sentence_custom_split(e):
+    o = e["outputs"]
+    return (f"The training (n={o.get('n_train', '?')}) and validation "
+            f"(n={o.get('n_val', '?')}) sets were then replaced by user-supplied "
+            f"files; the test set was left unchanged.")
 
 
 def _train_group_key(e):
@@ -89,7 +105,8 @@ def _train_group_key(e):
     the full protocol; later ones in the group refer back to it instead of
     repeating the same sentence template verbatim."""
     i = e["inputs"]
-    return (i.get("outcome"), i.get("scoring"), i.get("cv_folds"), i.get("smote"))
+    return (i.get("outcome"), i.get("scoring"), i.get("cv_folds"), i.get("smote"),
+            i.get("tuned", True))
 
 
 def _sentence_train_models(group):
@@ -128,7 +145,7 @@ def _sentence_fit_spline(e):
 
 def _sentence_epi_km(e):
     i, o = e["inputs"], e["outputs"]
-    sentence = (f"Kaplan–Meier survival analysis was performed using "
+    sentence = (f"Kaplan-Meier survival analysis was performed using "
                 f"{i.get('time', 'time')} as the time variable and "
                 f"{i.get('event', 'event')} as the event indicator")
     if i.get("group"):
@@ -152,7 +169,7 @@ def _sentence_epi_cox(e):
 
 def _sentence_epi_hl(e):
     i, o = e["inputs"], e["outputs"]
-    return (f"Model calibration was assessed using the Hosmer–Lemeshow "
+    return (f"Model calibration was assessed using the Hosmer-Lemeshow "
             f"goodness-of-fit test on {i.get('model', 'the model')} "
             f"(statistic={o.get('hl_statistic', '?')}, p={o.get('p_value', '?')}).")
 
@@ -160,19 +177,21 @@ def _sentence_epi_hl(e):
 _BUILDERS = {
     "upload": _sentence_upload,
     "confirm": _sentence_confirm,
+    "upload_custom_split": _sentence_custom_split,
     "fit_spline": _sentence_fit_spline,
     "epi_km": _sentence_epi_km,
     "epi_cox": _sentence_epi_cox,
     "epi_hl": _sentence_epi_hl,
 }
 
-# What makes two log entries "the same analysis step" for report purposes,
-# keyed by action. Re-running a step (e.g. re-fitting a spline with a tweaked
+# what makes two log entries "the same analysis step" for report purposes,
+# keyed by action. re-running a step (e.g. re-fitting a spline with a tweaked
 # knot count) should replace its earlier entry in the report rather than
 # appending a second sentence for it.
 _DEDUPE_KEY = {
     "upload": lambda i: (),
     "confirm": lambda i: (),
+    "upload_custom_split": lambda i: (),
     "train_model": lambda i: (i.get("model"), i.get("outcome")),
     "fit_spline": lambda i: (i.get("predictor"), i.get("outcome")),
     "epi_km": lambda i: (i.get("time"), i.get("event"), i.get("group")),
@@ -203,6 +222,11 @@ def generate_methods_text(session_id):
     included.
     """
     entries = _dedupe_latest(analysis_log.read_log(session_id))
+    # a custom split only stands untill the dataset is confirmed (re-split) again
+    last_confirm = max((n for n, e in enumerate(entries) if e["action"] == "confirm"),
+                       default=-1)
+    entries = [e for n, e in enumerate(entries)
+               if not (e["action"] == "upload_custom_split" and n < last_confirm)]
     train_groups = {}
     for entry in entries:
         if entry["action"] == "train_model":

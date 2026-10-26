@@ -238,3 +238,76 @@ def test_predict_single_binary_returns_probability():
     result = ml.predict_single(pipe, row, feat_cols, "binary", info["classes"])
     assert "probability" in result
     assert 0.0 <= result["probability"] <= 1.0
+
+
+def test_determine_task_many_text_levels_is_multiclass_not_continuous():
+    assert ml.determine_task(pd.Series(list("abcdefghijklmn"))) == "multiclass"
+
+
+def test_encode_outcome_keeps_missing_outcome_as_nan_not_a_class():
+    y, classes = ml.encode_outcome(pd.Series([0, 1, np.nan, 1, 0, 1.0]), "binary")
+    assert classes == ["0", "1"]
+    assert np.isnan(y[2])
+    assert list(y[~np.isnan(y)]) == [0, 1, 1, 0, 1]
+
+
+def test_encode_outcome_with_training_classes_on_a_one_class_subset():
+    y, _ = ml.encode_outcome(pd.Series(["yes", "yes"]), "binary", classes=["no", "yes"])
+    assert list(y) == [1, 1]          # not [0, 0], wich a fresh encoder would give
+
+
+def test_encode_outcome_float_and_int_labels_are_the_same_class():
+    y, _ = ml.encode_outcome(pd.Series([0, 1, 1]), "binary", classes=["0.0", "1.0"])
+    assert list(y) == [0, 1, 1]
+
+
+def test_encode_outcome_unseen_label_becomes_nan():
+    y, _ = ml.encode_outcome(pd.Series(["a", "z"]), "multiclass", classes=["a", "b"])
+    assert y[0] == 0 and np.isnan(y[1])
+
+
+def test_train_and_evaluate_with_missing_outcome_rows():
+    df = _binary_frame(n=160)
+    df["outcome"] = df["outcome"].astype(float)
+    df.loc[[3, 10, 50, 130, 140], "outcome"] = np.nan
+    train, val = df.iloc[:120], df.iloc[120:]
+
+    pipe, info = ml.train_one_model(
+        "LogisticRegression", train, val, "outcome", ["age", "sex"], "binary",
+        do_grid_search=False)
+    assert info["classes"] == ["0", "1"]
+    assert info["n_train"] == 120 - 3
+    metrics, _ = ml.evaluate(pipe, val, "outcome", ["age", "sex"], "binary",
+                             classes=info["classes"])
+    assert metrics["N"] == 40 - 2
+    assert 0.0 <= metrics["AUROC"] <= 1.0
+
+
+def test_train_info_records_whether_hyperparameters_were_tuned():
+    df = _binary_frame(n=160)
+    train, val = df.iloc[:120], df.iloc[120:]
+    _, tuned = ml.train_one_model("LogisticRegression", train, val, "outcome",
+                                  ["age", "sex"], "binary",
+                                  param_grid={"clf__C": [0.1, 1.0]}, do_grid_search=True)
+    _, untuned = ml.train_one_model("LogisticRegression", train, val, "outcome",
+                                    ["age", "sex"], "binary", do_grid_search=False)
+    assert tuned["tuned"] is True
+    assert untuned["tuned"] is False
+
+
+def test_multiclass_metrics_when_a_class_is_absent_from_y_true():
+    # the model knows 3 classes, this slice of data only contains classes 0 and 2
+    y_true = np.array([0, 2, 0, 2])
+    y_pred = np.array([0, 2, 0, 2])
+    y_proba = np.array([[0.9, 0.05, 0.05], [0.05, 0.05, 0.9],
+                        [0.8, 0.1, 0.1], [0.1, 0.1, 0.8]])
+    _, coords = ml.multiclass_metrics(y_true, y_pred, y_proba)
+    assert [s["name"] for s in coords["roc"]] == ["class 0", "class 2"]
+    assert all(s["auc"] == 1.0 for s in coords["roc"])
+
+
+def test_encode_outcome_keeps_01_and_1_apart_but_folds_1_0_into_1():
+    y, classes = ml.encode_outcome(pd.Series(["01", "1", "2"]), "multiclass")
+    assert classes == ["01", "1", "2"]
+    y, classes = ml.encode_outcome(pd.Series([1.0, 2.0, 1.0]), "binary")
+    assert classes == ["1", "2"]

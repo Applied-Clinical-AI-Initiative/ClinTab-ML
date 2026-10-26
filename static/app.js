@@ -1,7 +1,7 @@
-/* ClinTAB-ML front end.
-   Vanilla JS only: tab nav, fetch calls, table/plot rendering. PapaParse is
-   used solely for the instant in-browser preview; the raw CSV still goes to
-   Flask, which does all real parsing, stats and ML. */
+/* clintab-ml front end.
+   vanilla js only: tab nav, fetch calls, table/plot rendering. papaparse is
+   used solely for the instant in-browser preview; the raw csv still goes to
+   flask, which does all real parsing, stats and ml. */
 
 const State = { columns: [], coltypes: {}, confirmed: false, lastTrain: null };
 
@@ -36,59 +36,74 @@ function showBusy(msg, sub, withBar) {
 function busyMsg(msg, sub) { $("busyMsg").textContent = msg; if (sub != null) $("busySub").textContent = sub; }
 function setBusyBar(p) { $("busyBar").style.width = p + "%"; }
 function hideBusy() { $("busy").classList.remove("show"); }
-async function jget(url) { const r = await fetch(url); return r.json(); }
-async function jpost(url, body) {
-  const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body) });
-  return r.json();
+// every api reply is json ({error} on failure), but a crash or a proxy can still
+// hand back html or nothing, so these never throw into the page
+async function api(url, opts) {
+  let r;
+  try { r = await fetch(url, opts); }
+  catch (e) { return { error: "Cannot reach the server. Is python app.py still running?" }; }
+  try { return await r.json(); }
+  catch (e) { return { error: `Unexpected server response (HTTP ${r.status}). Check the terminal running app.py.` }; }
 }
-function pill(t) { return `<span class="pill ${t}">${t}</span>`; }
-function num(v) { return (v === null || v === undefined || v === "") ? "" : v; }
+const jget = (url) => api(url);
+const jpost = (url, body) => api(url, { method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(body) });
+const jform = (url, fd) => api(url, { method: "POST", body: fd });
+const jdelete = (url) => api(url, { method: "DELETE" });
 
-// ---------- hover-definition glossary (Data Summary, Model Training, Model
-// Testing, Spline, Clinical Epi only) ----------
+// column names, filenames and category labels all come out of the user's csv,
+// so anything built with innerhtml goes through esc()
+const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+function esc(v) { return String(v ?? "").replace(/[&<>"']/g, (ch) => ESC[ch]); }
+function opt(value, text = value) { return new Option(text, value); }
+function pill(t) { return `<span class="pill ${esc(t)}">${esc(t)}</span>`; }
+function num(v) { return (v === null || v === undefined || v === "") ? "" : esc(v); }
+
+// ---------- hover-definition glossary (data summary, model training, model
+// testing, spline, clinical epi only) ----------
 const GLOSSARY = {
-  "AUROC": "Area under the ROC curve — how well the model tells apart who will vs won't have the outcome. 0.5 = random guessing, 1.0 = perfect.",
-  "AUPRC": "Area under the precision-recall curve — like AUROC, but more informative when the outcome is rare.",
+  "AUROC": "Area under the ROC curve. How well the model tells apart who will vs won't have the outcome. 0.5 = random guessing, 1.0 = perfect.",
+  "AUPRC": "Area under the precision-recall curve. Like AUROC, but more informative when the outcome is rare.",
   "Sensitivity": "Of patients who truly had the outcome, the % the model correctly caught. Also called recall.",
   "Specificity": "Of patients who truly did not have the outcome, the % correctly cleared.",
-  "PPV": "Positive predictive value — when the model predicts “yes,” how often it's actually right. Also called precision.",
-  "NPV": "Negative predictive value — when the model predicts “no,” how often it's actually right.",
+  "PPV": "Positive predictive value. When the model predicts “yes,” how often it's actually right. Also called precision.",
+  "NPV": "Negative predictive value. When the model predicts “no,” how often it's actually right.",
   "F1": "A single score balancing precision and sensitivity.",
   "F2": "Like F1, but weights sensitivity (catching true cases) higher than precision.",
-  "Brier": "How well-calibrated the predicted probabilities are — lower is better.",
+  "Brier": "How well-calibrated the predicted probabilities are. Lower is better.",
   "Accuracy": "The % of all predictions the model got right.",
   "BalancedAccuracy": "Accuracy adjusted so rare classes count as much as common ones.",
   "MacroF1": "F1 averaged evenly across every class, regardless of how common each one is.",
   "R2": "The % of variation in the outcome explained by the model.",
-  "RMSE": "Typical prediction error size, in the outcome's own units — penalizes large misses more than small ones.",
+  "RMSE": "Typical prediction error size, in the outcome's own units. Penalizes large misses more than small ones.",
   "MAE": "Typical prediction error size, in the outcome's own units, treating all misses equally.",
   "Threshold": "The predicted-probability cutoff above which a prediction counts as “yes” (default 50%).",
   "N": "Number of rows the statistic was computed on.",
-  "SD": "Standard deviation — how spread out the values are around the mean.",
-  "IQR": "Interquartile range — the span covering the middle 50% of values.",
+  "SD": "Standard deviation. How spread out the values are around the mean.",
+  "IQR": "Interquartile range. The span covering the middle 50% of values.",
   "Grid search": "Automatically trying different model settings (hyperparameters) to find the combination that scores best.",
   "SMOTE": "A technique for rare outcomes: creates synthetic extra examples of the minority class so the model doesn't just learn to predict the common outcome.",
   "Confounding variables": "Variables forced into the model and tagged, rather than dropped or left to compete for selection.",
   "Restricted Cubic Spline": "A smooth curve, allowed to bend only at its knots, fit through the data instead of a straight line.",
   "Knots": "The points along the predictor's range where the spline's curve is allowed to change shape.",
-  "AIC": "A score for comparing model fit — lower generally means a better-fitting model.",
+  "AIC": "A score for comparing model fit. Lower generally means a better-fitting model.",
   "Odds Ratio": "How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.",
   "Risk Ratio": "How much more likely the outcome is, in plain risk/probability terms, for the exposed group.",
-  "NNT": "Number needed to treat — how many patients you'd need to treat to prevent one additional bad outcome.",
-  "NNH": "Number needed to harm — how many patients you'd need to expose to cause one additional bad outcome.",
-  "Kaplan–Meier": "A curve showing the fraction of patients who have not yet had an event (like death) over time.",
+  "NNT": "Number needed to treat. How many patients you'd need to treat to prevent one additional bad outcome.",
+  "NNH": "Number needed to harm. How many patients you'd need to expose to cause one additional bad outcome.",
+  "Kaplan-Meier": "A curve showing the fraction of patients who have not yet had an event (like death) over time.",
   "Cox proportional hazards": "A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.",
-  "Log-rank": "A statistical test comparing two Kaplan–Meier curves to see if they're really different.",
-  "concordance": "Like AUROC, but for survival models — how often the model ranks patients' event risk in the right order.",
-  "HR": "Hazard ratio — how much a covariate speeds up (>1) or slows down (<1) time to the event.",
-  "Hosmer–Lemeshow": "A test checking whether a model's predicted probabilities match the real observed event rates.",
-  "HL statistic": "The Hosmer–Lemeshow test statistic — larger values suggest worse calibration.",
+  "Log-rank": "A statistical test comparing two Kaplan-Meier curves to see if they're really different.",
+  "concordance": "Like AUROC, but for survival models. How often the model ranks patients' event risk in the right order.",
+  "HR": "Hazard ratio. How much a covariate speeds up (>1) or slows down (<1) time to the event.",
+  "Hosmer-Lemeshow": "A test checking whether a model's predicted probabilities match the real observed event rates.",
+  "HL statistic": "The Hosmer-Lemeshow test statistic. Larger values suggest worse calibration.",
   "2×2 table": "The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.",
-  "Pearson r": "A number from -1 to 1 measuring the strength and direction of a straight-line relationship between a feature and the outcome. Near 0 means little linear relationship — there could still be a non-linear one.",
+  "Pearson r": "A number from -1 to 1 measuring the strength and direction of a straight-line relationship between a feature and the outcome. Near 0 means little linear relationship, but there could still be a non-linear one.",
 };
 function term(label, key) {
-  return label;
+  const tip = GLOSSARY[key || label];
+  return tip ? `<span class="term" tabindex="0" data-tip="${esc(tip)}">${esc(label)}</span>` : esc(label);
 }
 
 // ---------- tab navigation ----------
@@ -116,7 +131,7 @@ function goToTrain() {
 }
 
 // =====================================================================
-// 1. UPLOAD
+// 1. upload
 // =====================================================================
 const drop = $("drop"), fileInput = $("fileInput");
 drop.addEventListener("click", () => fileInput.click());
@@ -127,11 +142,11 @@ fileInput.addEventListener("change", e => { if (e.target.files[0]) handleFile(e.
 
 function handleFile(file) {
   if (!file.name.toLowerCase().endsWith(".csv")) { toast("Please choose a .csv file.", "err"); return; }
-  // instant in-browser preview (local, does not touch the server)
+  // instant in-browser preveiw (local, does not touch the server)
   Papa.parse(file, { header: true, preview: 20, skipEmptyLines: true,
     complete: (res) => renderPreview(res.meta.fields, res.data), error: () => {} });
 
-  // send the raw file to the local Python process (localhost) for real parsing
+  // send the raw file to the local python proccess (localhost) for real parsing
   const fd = new FormData(); fd.append("file", file);
   const sizeMB = (file.size / 1048576).toFixed(1);
   showBusy(`Uploading ${file.name}`, `${sizeMB} MB`);
@@ -159,8 +174,8 @@ function handleFile(file) {
       toast("Upload failed: " + msg, "err"); $("uploadInfo").textContent = msg; return;
     }
     State.columns = d.columns; State.confirmed = false;
-    $("uploadInfo").innerHTML = `<b>${d.filename}</b> — ${d.n_rows} rows × ${d.n_cols} columns`;
-    $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${d.filename}</b><br>${d.n_rows} rows`;
+    $("uploadInfo").innerHTML = `<b>${esc(d.filename)}</b>: ${d.n_rows} rows × ${d.n_cols} columns`;
+    $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${esc(d.filename)}</b><br>${d.n_rows} rows`;
     renderTypeTable(d.columns); buildStratOptions(d.columns);
     $("typePanel").style.display = $("splitPanel").style.display = "block";
     loadDatasetList();
@@ -179,7 +194,7 @@ function renderPreview(fields, rows) {
   $("previewPanel").style.display = "block";
   $("previewMeta").textContent = `(first ${rows.length} rows, in-browser)`;
   const t = $("previewTable"); t.innerHTML = "";
-  t.appendChild(el("tr", {}, fields.map(f => `<th>${f}</th>`).join("")));
+  t.appendChild(el("tr", {}, fields.map(f => `<th>${esc(f)}</th>`).join("")));
   rows.forEach(r => t.appendChild(el("tr", {}, fields.map(f => `<td>${num(r[f])}</td>`).join(""))));
 }
 
@@ -189,11 +204,11 @@ function defaultMissingDecision(pct) {
   if (pct >= 30) return "zero";
   return "impute"; // 0 < pct < 30
 }
-function missingSelectHtml(c) {
-  if (!(c.pct_missing > 0)) return `<span class="muted small">—</span>`;
+function missingSelectHtml(c, i) {
+  if (!(c.pct_missing > 0)) return `<span class="muted small">none</span>`;
   const def = defaultMissingDecision(c.pct_missing);
   const opt = (v, label) => `<option value="${v}"${def === v ? " selected" : ""}>${label}</option>`;
-  return `<select id="miss_${c.name}" class="small">
+  return `<select id="miss_${i}" class="small">
       ${opt("impute", "Impute (median / most frequent)")}
       ${opt("zero", "Populate 0")}
       ${opt("include", "Include as-is")}
@@ -204,21 +219,22 @@ function renderTypeTable(cols) {
   const t = $("typeTable"); t.innerHTML = "";
   t.appendChild(el("tr", {}, `<th>Column</th><th>Detected</th><th>Unique</th><th>% missing</th>
     <th>Type override</th><th>Missing-data handling</th>`));
-  cols.forEach(c => {
+  // ids use the column's position, a header can contain quotes or brackets
+  cols.forEach((c, i) => {
     const tr = el("tr");
     const radios = TYPES.map(tp => `<label class="small" style="font-weight:500;margin-right:8px">
-        <input type="radio" name="ty_${c.name}" value="${tp}" ${c.type === tp ? "checked" : ""}> ${tp}</label>`).join("");
-    tr.innerHTML = `<td><b>${c.name}</b></td><td>${pill(c.type)}</td><td>${c.n_unique}</td>
+        <input type="radio" name="ty_${i}" value="${tp}" ${c.type === tp ? "checked" : ""}> ${tp}</label>`).join("");
+    tr.innerHTML = `<td><b>${esc(c.name)}</b></td><td>${pill(c.type)}</td><td>${c.n_unique}</td>
       <td ${c.high_missing ? 'style="color:var(--warn);font-weight:600"' : ""}>${c.pct_missing}%</td>
-      <td>${radios}</td><td>${missingSelectHtml(c)}</td>`;
+      <td>${radios}</td><td>${missingSelectHtml(c, i)}</td>`;
     t.appendChild(tr);
   });
 }
 
 function buildStratOptions(cols) {
-  const sel = $("stratCol"); sel.innerHTML = `<option value="">— none —</option>`;
+  const sel = $("stratCol"); sel.innerHTML = `<option value="">None</option>`;
   cols.filter(c => c.type === "binary" || c.type === "categorical")
-    .forEach(c => sel.appendChild(el("option", { value: c.name }, c.name)));
+    .forEach(c => sel.appendChild(opt(c.name)));
 }
 $("stratCol").addEventListener("change", () => {
   $("smoteBox").style.display = $("stratCol").value ? "block" : "none";
@@ -230,21 +246,22 @@ $("splitMethod").addEventListener("change", e => {
 
 $("confirmBtn").addEventListener("click", async () => {
   const types = {}, missing = {};
-  State.columns.forEach(c => {
-    const r = document.querySelector(`input[name="ty_${c.name}"]:checked`);
+  State.columns.forEach((c, i) => {
+    const r = document.querySelector(`input[name="ty_${i}"]:checked`);
     types[c.name] = r ? r.value : c.type;
-    const m = $(`miss_${c.name}`); if (m) missing[c.name] = m.value;
+    const m = $(`miss_${i}`); if (m) missing[c.name] = m.value;
   });
   const ratios = [+$("rTrain").value, +$("rVal").value, +$("rTest").value];
+  if (ratios.some(x => !(x > 0))) { toast("Train, validation and test % must all be above zero.", "err"); return; }
+  if ($("splitMethod").value === "stratified" && !$("stratCol").value) {
+    toast("Choose a column to stratify by, or switch the method to Random.", "err"); return;
+  }
   $("confirmMsg").textContent = "Splitting & saving…";
   showBusy("Cleaning & splitting dataset…", "saving train / validation / test partitions", false);
-  let d;
-  try {
-    d = await jpost("/api/confirm", {
-      types, missing, ratios, method: $("splitMethod").value,
-      stratify_col: $("stratCol").value || null, smote: $("smoteToggle").checked
-    });
-  } catch (e) { hideBusy(); toast("Cannot reach the server — is python app.py running?", "err"); return; }
+  const d = await jpost("/api/confirm", {
+    types, missing, ratios, method: $("splitMethod").value,
+    stratify_col: $("stratCol").value || null, smote: $("smoteToggle").checked
+  });
   hideBusy();
   if (d.error) { toast(d.error, "err"); $("confirmMsg").textContent = d.error; return; }
   State.confirmed = true; State.coltypes = types;
@@ -257,7 +274,7 @@ $("confirmBtn").addEventListener("click", async () => {
 });
 
 // =====================================================================
-// 2. SUMMARY
+// 2. summary
 // =====================================================================
 async function loadSummary() {
   const d = await jget("/api/summary");
@@ -274,7 +291,7 @@ async function loadSummary() {
   const ct = $("contTable"); ct.innerHTML = "";
   ct.appendChild(el("tr", {}, `<th>Variable</th><th>${term("N")}</th><th>% missing</th><th>Mean</th>
     <th>Median</th><th>${term("SD")}</th><th>${term("IQR")}</th><th>Min</th><th>Max</th>`));
-  d.continuous.forEach(r => ct.appendChild(el("tr", {}, `<td>${r.variable}</td><td>${r.n}</td>
+  d.continuous.forEach(r => ct.appendChild(el("tr", {}, `<td>${esc(r.variable)}</td><td>${r.n}</td>
     <td>${r.pct_missing}</td><td>${num(r.mean)}</td><td>${num(r.median)}</td><td>${num(r.sd)}</td>
     <td>${num(r.iqr)}</td><td>${num(r.min)}</td><td>${num(r.max)}</td>`)));
   if (!d.continuous.length) ct.appendChild(el("tr", {}, `<td colspan="9" class="muted">None</td>`));
@@ -283,17 +300,17 @@ async function loadSummary() {
   kt.appendChild(el("tr", {}, `<th>Variable</th><th>Type</th><th>N</th><th>% missing</th><th>Category</th><th>Count</th><th>%</th>`));
   d.categorical.forEach(v => {
     v.categories.forEach((cat, i) => kt.appendChild(el("tr", {}, `
-      ${i === 0 ? `<td rowspan="${v.categories.length}"><b>${v.variable}</b></td>
+      ${i === 0 ? `<td rowspan="${v.categories.length}"><b>${esc(v.variable)}</b></td>
         <td rowspan="${v.categories.length}">${pill(v.type)}</td>
         <td rowspan="${v.categories.length}">${v.n}</td>
         <td rowspan="${v.categories.length}">${v.pct_missing}</td>` : ""}
-      <td>${cat.category}</td><td>${cat.count}</td><td>${cat.pct}</td>`)));
+      <td>${esc(cat.category)}</td><td>${cat.count}</td><td>${cat.pct}</td>`)));
   });
   if (!d.categorical.length) kt.appendChild(el("tr", {}, `<td colspan="7" class="muted">None</td>`));
 }
 
 // =====================================================================
-// 3. TRAIN
+// 3. train
 // =====================================================================
 let TRAIN_META = null;
 async function initTrain() {
@@ -305,7 +322,7 @@ async function initTrain() {
   $("smoteTrainBox").style.display = d.smote_available ? "flex" : "none";
 
   const o = $("outcomeSel"); o.innerHTML = "";
-  d.outcomes.forEach(c => o.appendChild(el("option", { value: c.name }, `${c.name} (${c.type})`)));
+  d.outcomes.forEach(c => o.appendChild(opt(c.name, `${c.name} (${c.type})`)));
   fillChecklist($("excludeSel"), d.columns.map(c => c.name));
   fillChecklist($("confoundSel"), d.columns.map(c => c.name));
   o.onchange = onOutcomeChange; onOutcomeChange();
@@ -316,27 +333,32 @@ async function useCustomSplit() {
   const fd = new FormData();
   fd.append("train_file", tf); fd.append("val_file", vf);
   showBusy("Uploading custom split…", "re-detecting column types");
-  const d = await fetch("/api/train/upload-split", { method: "POST", body: fd }).then(r => r.json());
+  const d = await jform("/api/train/upload-split", fd);
   hideBusy();
   if (d.error) {
     toast(d.error, "err");
-    $("customSplitMsg").innerHTML = `<span class="err-text">${d.error}</span>`;
+    $("customSplitMsg").innerHTML = `<span class="err-text">${esc(d.error)}</span>`;
     return;
   }
   $("customSplitMsg").innerHTML = `<span class="ok-text">Using custom split.</span> train ${d.n_train} · val ${d.n_val}`;
   toast("Custom train/validation split applied.", "ok");
   initTrain();
 }
-function fillMulti(sel, names) { sel.innerHTML = ""; names.forEach(n => sel.appendChild(el("option", { value: n }, n))); }
+function fillMulti(sel, names) { sel.innerHTML = ""; names.forEach(n => sel.appendChild(opt(n))); }
 function fillChecklist(box, names) {
   box.innerHTML = "";
-  names.forEach(n => box.appendChild(el("label", {}, `<input type="checkbox" value="${n}"> ${n}`)));
+  names.forEach(n => {
+    const label = el("label"), cb = el("input", { type: "checkbox", value: n });
+    label.append(cb, " " + n);
+    box.appendChild(label);
+  });
 }
 function multiValues(box) { return [...box.querySelectorAll("input:checked")].map(c => c.value); }
 
 function taskForOutcome(name) {
   const c = TRAIN_META.outcomes.find(x => x.name === name);
   if (!c) return "binary";
+  if (c.task) return c.task;                 // the server's own call, same rule as /api/train
   if (c.type === "continuous") return "continuous";
   if (c.type === "binary") return "binary";
   return "multiclass";
@@ -356,12 +378,11 @@ function onOutcomeChange() {
   const ml = $("modelList"); ml.innerHTML = "";
   const ge = $("gridEditors"); ge.innerHTML = "";
   Object.keys(grids).forEach(m => {
-    ml.appendChild(el("label", {}, `<input type="checkbox" class="mdl" value="${m}" checked> ${m}`));
+    ml.appendChild(el("label", {}, `<input type="checkbox" class="mdl" value="${esc(m)}" checked> ${esc(m)}`));
     const id = "grid_" + m;
-    ge.appendChild(el("div", {}, `<label class="small" style="margin-top:6px">${m}</label>
-      <textarea id="${id}" rows="2">${JSON.stringify(grids[m])}</textarea>`));
+    ge.appendChild(el("div", {}, `<label class="small" style="margin-top:6px">${esc(m)}</label>
+      <textarea id="${esc(id)}" rows="2">${esc(JSON.stringify(grids[m]))}</textarea>`));
   });
-  // exclude outcome from feature multiselects (visually keep but warn server handles)
 }
 function toggleModels(on) { document.querySelectorAll(".mdl").forEach(c => c.checked = on); }
 
@@ -394,7 +415,7 @@ function showConfirm(title, message, okLabel = "Delete") {
   return new Promise(resolve => {
     const modal = $("confirmModal");
     $("confirmTitle").textContent = title;
-    $("confirmMsg").textContent = message;
+    $("confirmModalMsg").textContent = message;
     $("confirmOk").textContent = okLabel;
     modal.classList.add("show");
     const finish = (v) => {
@@ -434,7 +455,13 @@ async function startTraining() {
   const exclude = multiValues($("excludeSel"));
   const confounders = multiValues($("confoundSel"));
   const grids = {};
-  models.forEach(m => { const t = $("grid_" + m); if (t) { try { grids[m] = JSON.parse(t.value); } catch (e) {} } });
+  for (const m of models) {
+    const t = $("grid_" + m); if (!t) continue;
+    try { grids[m] = JSON.parse(t.value); }
+    catch (e) { toast(`The ${m} hyperparameter grid isn't valid JSON.`, "err"); return; }
+  }
+  const cvRaw = $("cvFolds").value.trim(), cvFolds = cvRaw === "" ? null : parseInt(cvRaw, 10);
+  if (cvFolds !== null && !(cvFolds >= 2)) { toast("CV folds must be 2 or more (or empty).", "err"); return; }
 
   setTrainingActive(true);
   $("trainLog").style.display = "block"; $("trainLog").textContent = "";
@@ -443,7 +470,7 @@ async function startTraining() {
   const cfg = await jpost("/api/train", {
     outcome, exclude, confounders, models, grids,
     scoring: $("scoreSel").value, grid_search: $("gridToggle").checked,
-    smote: $("smoteTrain").checked, threshold: +$("thrInput").value
+    cv_folds: cvFolds, smote: $("smoteTrain").checked, threshold: +$("thrInput").value
   });
   if (cfg.error) { toast(cfg.error, "err"); setTrainingActive(false); return; }
 
@@ -461,10 +488,12 @@ async function startTraining() {
       if (!metricKeys) metricKeys = Object.keys(m.metrics);
       metricsRows.push({ model: m.model, ...m.metrics });
       if (m.importance_png) {
-        impWrap.appendChild(el("div", { className: "plotwrap" },
-          `<img class="plot" src="${m.importance_png}" style="max-width:430px">
-           <div class="flex"><button class="ghost sm" onclick="dlPng('${m.importance_png}','${m.model}_importance.png')">PNG</button>
-           <button class="ghost sm" onclick='dlImpCsv(${JSON.stringify(JSON.stringify(m.importance))},"${m.model}_importance.csv")'>CSV</button></div>`));
+        const box = el("div", { className: "plotwrap" },
+          `<img class="plot" src="${m.importance_png}" style="max-width:430px"><div class="flex"></div>`);
+        const btns = box.querySelector(".flex");
+        btns.appendChild(dlButton("PNG", () => dlPng(m.importance_png, `${m.model}_importance.png`)));
+        btns.appendChild(dlButton("CSV", () => dlImpCsv(m.importance, `${m.model}_importance.csv`)));
+        impWrap.appendChild(box);
       }
     } else if (m.event === "complete") {
       es.close(); trainES = null;
@@ -525,21 +554,22 @@ function renderValMetrics(keys, rows) {
   const t = $("valMetricsTable"); t.innerHTML = "";
   if (!keys || !keys.length) { t.innerHTML = `<tr><td class="muted">No metrics available.</td></tr>`; return; }
   t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${term(k)}</th>`).join("")));
-  rows.forEach(r => t.appendChild(el("tr", {}, `<td><b>${r.model}</b></td>` +
+  rows.forEach(r => t.appendChild(el("tr", {}, `<td><b>${esc(r.model)}</b></td>` +
     keys.map(k => `<td>${num(r[k])}</td>`).join(""))));
 }
 
 // =====================================================================
-// 4. TEST
+// 4. test
 // =====================================================================
 $("testSource").addEventListener("change", e =>
   $("testUploadBox").style.display = e.target.value === "upload" ? "block" : "none");
 $("pklUpload").addEventListener("change", e => {
   if (!e.target.files[0]) return;
   const fd = new FormData(); fd.append("file", e.target.files[0]);
-  fetch("/api/model/upload", { method: "POST", body: fd }).then(r => r.json()).then(d => {
+  jform("/api/model/upload", fd).then(d => {
     if (d.error) toast(d.error, "err"); else { toast("Model uploaded.", "ok"); loadModels(); }
   });
+  e.target.value = "";
 });
 function fmtCreated(ts) {
   if (!ts || ts.length < 15) return "";
@@ -552,6 +582,7 @@ function fmtCreated(ts) {
 }
 async function loadModels() {
   const d = await jget("/api/models");
+  if (d.error) { toast(d.error, "err"); return; }
   const list = $("modelPickList"), pm = $("predModel"), hm = $("hlModel");
   if (pm) pm.innerHTML = ""; if (hm) hm.innerHTML = "";
   if (!d.models.length) { list.innerHTML = `<span class="muted small">Train Models to Display for Model Testing.</span>`;
@@ -559,19 +590,19 @@ async function loadModels() {
   list.innerHTML = "";
   d.models.forEach(m => {
     const meta = m.meta || {};
-    const taskPill = meta.task ? `<span class="pill ${meta.task}">${meta.task}</span>` : "";
+    const taskPill = meta.task ? pill(meta.task) : "";
     const auc = meta.val_metrics && meta.val_metrics.AUROC != null ? `AUROC ${meta.val_metrics.AUROC}` : "";
     const when = fmtCreated(meta.created);
     const metaLine = [auc, when].filter(Boolean).join(" · ");
-    const tip = `${m.name}${meta.outcome ? ` — outcome: ${meta.outcome}` : ""}${when ? ` — trained ${when}` : ""}`;
-    list.appendChild(el("label", { title: tip }, `<input type="checkbox" class="tmdl" value="${m.name}">
+    const tip = `${m.name}${meta.outcome ? `, outcome: ${meta.outcome}` : ""}${when ? `, trained ${when}` : ""}`;
+    list.appendChild(el("label", { title: tip }, `<input type="checkbox" class="tmdl" value="${esc(m.name)}">
       <span class="mdl-info">
-        <div class="mdl-top"><b>${meta.model || m.name}</b>${taskPill}</div>
-        ${meta.outcome ? `<span class="muted small mdl-sub">Outcome: ${meta.outcome}</span>` : ""}
-        ${metaLine ? `<span class="muted small mdl-sub">${metaLine}</span>` : ""}
+        <div class="mdl-top"><b>${esc(meta.model || m.name)}</b>${taskPill}</div>
+        ${meta.outcome ? `<span class="muted small mdl-sub">Outcome: ${esc(meta.outcome)}</span>` : ""}
+        ${metaLine ? `<span class="muted small mdl-sub">${esc(metaLine)}</span>` : ""}
       </span>`));
-    if (pm) pm.appendChild(el("option", { value: m.name }, m.name));
-    if (hm && meta.task === "binary") hm.appendChild(el("option", { value: m.name }, m.name));
+    if (pm) pm.appendChild(opt(m.name));
+    if (hm && meta.task === "binary") hm.appendChild(opt(m.name));
   });
   updateDeleteSelectedBtn();
 }
@@ -591,8 +622,7 @@ async function confirmDeleteSelected() {
     "Delete"
   );
   if (!ok) return;
-  const results = await Promise.all(names.map(n =>
-    fetch(`/api/models/${encodeURIComponent(n)}`, { method: "DELETE" }).then(r => r.json())));
+  const results = await Promise.all(names.map(n => jdelete(`/api/models/${encodeURIComponent(n)}`)));
   const failed = results.filter(r => r.error).length;
   toast(failed ? `Deleted ${names.length - failed} of ${names.length} models.` : "Model(s) deleted.",
         failed ? "err" : "ok");
@@ -610,8 +640,9 @@ $("testBtn").addEventListener("click", async () => {
     fd.append("file", $("testCsv").files[0]);
   }
   $("testBtn").disabled = true;
-  const d = await fetch("/api/test", { method: "POST", body: fd }).then(r => r.json());
-  $("testBtn").disabled = false;
+  let d;
+  try { d = await jform("/api/test", fd); }
+  finally { $("testBtn").disabled = false; }
   if (d.error) { toast(d.error, "err"); return; }
   document.querySelector('[data-tab="test"]').classList.add("done");
   renderTest(d);
@@ -628,8 +659,8 @@ function renderTest(d) {
   const t = $("testMetricsTable"); t.innerHTML = "";
   t.appendChild(el("tr", {}, `<th>Model</th>` + keys.map(k => `<th>${term(k)}</th>`).join("")));
   d.models.forEach(m => {
-    if (m.error) { t.appendChild(el("tr", {}, `<td><b>${m.name}</b></td><td colspan="${keys.length}" class="err-text">${m.error}</td>`)); return; }
-    t.appendChild(el("tr", {}, `<td><b>${m.name}</b></td>` + keys.map(k => `<td>${num(m.metrics[k])}</td>`).join("")));
+    if (m.error) { t.appendChild(el("tr", {}, `<td><b>${esc(m.name)}</b></td><td colspan="${Math.max(keys.length, 1)}" class="err-text">${esc(m.error)}</td>`)); return; }
+    t.appendChild(el("tr", {}, `<td><b>${esc(m.name)}</b></td>` + keys.map(k => `<td>${num(m.metrics[k])}</td>`).join("")));
   });
 
   const pp = $("testPlots"); pp.innerHTML = "";
@@ -638,7 +669,7 @@ function renderTest(d) {
       m.pred_vs_actual_png || (m.correlations && m.correlations.length);
     if (!hasPlots) return;
     const group = el("div", { className: "test-model-group" });
-    group.appendChild(el("h4", {}, m.name));
+    group.appendChild(el("h4", { textContent: m.name }));
     const row = el("div", { className: "test-model-row" });
     if (m.confusion_png) row.appendChild(plotBox(m.confusion_png, "confusion", "confusion.png"));
     if (m.calibration_png) row.appendChild(plotBox(m.calibration_png, "calibration", "calibration.png"));
@@ -651,15 +682,16 @@ function renderTest(d) {
 }
 function plotBox(src, label, fname) {
   const d = el("div", { className: "plotwrap" });
-  d.innerHTML = `<div class="small muted">${label}</div><img class="plot" src="${src}" style="max-width:430px">
-    <div class="flex"><button class="ghost sm" onclick="dlPng('${src}','${fname}')">PNG</button></div>`;
+  d.innerHTML = `<div class="small muted">${esc(label)}</div><img class="plot" src="${src}" style="max-width:430px">
+    <div class="flex"></div>`;
+  d.querySelector(".flex").appendChild(dlButton("PNG", () => dlPng(src, fname)));
   return d;
 }
 function correlationBox(name, rows) {
   const d = el("div", { className: "plotwrap" });
-  const body = rows.map(r => `<tr><td>${r.feature}</td><td>${num(r.pearson_r)}</td></tr>`).join("");
+  const body = rows.map(r => `<tr><td>${esc(r.feature)}</td><td>${num(r.pearson_r)}</td></tr>`).join("");
   d.innerHTML = `<details>
-      <summary>${name}: view ${term("Pearson r")} table</summary>
+      <summary>${esc(name)}: view ${term("Pearson r")} table</summary>
       <table style="margin-top:6px;max-width:320px">
         <tr><th>Feature</th><th>${term("Pearson r")}</th></tr>${body}</table>
     </details>`;
@@ -671,34 +703,44 @@ async function buildPredForm() {
   const name = $("predModel").value; if (!name) { toast("Pick a model.", "err"); return; }
   const d = await jget("/api/model/features?name=" + encodeURIComponent(name));
   const w = $("predFormWrap"); w.innerHTML = "";
-  if (!d.features) { w.innerHTML = `<span class="muted small">Uploaded model has no stored feature list — use the JSON upload below.</span>`; return; }
+  if (d.error) { toast(d.error, "err"); return; }
+  if (!d.features) { w.innerHTML = `<span class="muted small">Uploaded model has no stored feature list. Use the JSON upload below.</span>`; return; }
   const grid = el("div", { className: "checklist" });
-  d.features.forEach(f => grid.appendChild(el("div", {}, `<label>${f}</label><input class="pf" data-f="${f}" type="text">`)));
+  d.features.forEach(f => {
+    const box = el("div"), inp = el("input", { className: "pf", type: "text" });
+    inp.dataset.f = f;
+    box.append(el("label", { textContent: f }), inp);
+    grid.appendChild(box);
+  });
   w.appendChild(grid);
-  w.appendChild(el("div", { style: "margin-top:10px" }, `<button onclick="predictForm('${name}')">Predict outcome</button>`));
+  const go = el("button", { textContent: "Predict outcome" });
+  go.onclick = () => predictForm(name);
+  w.appendChild(el("div", { style: "margin-top:10px" })).appendChild(go);
 }
 async function predictForm(name) {
   const row = {};
-  document.querySelectorAll(".pf").forEach(i => { if (i.value !== "") row[i.dataset.f] = isNaN(+i.value) ? i.value : +i.value; });
+  document.querySelectorAll(".pf").forEach(i => {
+    const v = i.value.trim();
+    if (v !== "") row[i.dataset.f] = isNaN(+v) ? v : +v;      // blank stays missing
+  });
   const d = await jpost("/api/predict-single", { model: name, row });
   showPred(d);
 }
 async function predictUpload() {
   if (!$("predPkl").files[0] || !$("predJson").files[0]) { toast("Choose model and JSON.", "err"); return; }
   const fd = new FormData(); fd.append("model_file", $("predPkl").files[0]); fd.append("json_file", $("predJson").files[0]);
-  const d = await fetch("/api/predict-single", { method: "POST", body: fd }).then(r => r.json());
-  showPred(d);
+  showPred(await jform("/api/predict-single", fd));
 }
 function showPred(d) {
   if (d.error) { toast(d.error, "err"); return; }
-  let h = `<div class="card"><div class="lbl">Prediction</div><div class="big">${d.prediction}</div>`;
+  let h = `<div class="card"><div class="lbl">Prediction</div><div class="big">${esc(d.prediction)}</div>`;
   if (d.probability != null) h += `<div class="small">probability ${(d.probability*100).toFixed(1)}%</div>`;
-  h += `<div class="small muted" style="margin-top:6px">${d.explanation}</div></div>`;
+  h += `<div class="small muted" style="margin-top:6px">${esc(d.explanation)}</div></div>`;
   $("predResult").innerHTML = h;
 }
 
 // =====================================================================
-// 5. SPLINE
+// 5. spline
 // =====================================================================
 async function initSpline() {
   const d = await jget("/api/train/columns");
@@ -718,7 +760,7 @@ $("splBtn").addEventListener("click", async () => {
 });
 
 // =====================================================================
-// 6. EPI
+// 6. epi
 // =====================================================================
 async function initEpi() {
   const d = await jget("/api/train/columns");
@@ -730,22 +772,22 @@ async function initEpi() {
   loadModels();
 }
 function fillSel(sel, names, withNone) {
-  sel.innerHTML = withNone ? `<option value="">— none —</option>` : "";
-  names.forEach(n => sel.appendChild(el("option", { value: n }, n)));
+  sel.innerHTML = withNone ? `<option value="">None</option>` : "";
+  names.forEach(n => sel.appendChild(opt(n)));
 }
 async function runEpi2x2() {
   const body = { a: +$("ea").value, b: +$("eb").value, c: +$("ec").value, d: +$("ed").value };
   const r = await jpost("/api/epi/or", body);
   const n = await jpost("/api/epi/nnt", body);
-  if (r.error) { toast(r.error, "err"); return; }
+  if (r.error || n.error) { $("epi2x2Result").innerHTML = ""; toast(r.error || n.error, "err"); return; }
   $("epi2x2Result").innerHTML = `
     <div class="cards">
-      <div class="card"><div class="lbl">${term("Odds Ratio")}</div><div class="big">${r.odds_ratio}</div><div class="small">95% CI ${r.or_ci[0]}–${r.or_ci[1]}</div></div>
-      <div class="card"><div class="lbl">${term("Risk Ratio")}</div><div class="big">${r.risk_ratio}</div><div class="small">95% CI ${r.rr_ci[0]}–${r.rr_ci[1]}</div></div>
-      <div class="card"><div class="lbl">${term(n.measure || "NNT/NNH", n.measure)}</div><div class="big">${n.value ?? "—"}</div><div class="small">ARD ${r.abs_risk_diff}</div></div>
+      <div class="card"><div class="lbl">${term("Odds Ratio")}</div><div class="big">${r.odds_ratio}</div><div class="small">95% CI ${r.or_ci[0]} to ${r.or_ci[1]}</div></div>
+      <div class="card"><div class="lbl">${term("Risk Ratio")}</div><div class="big">${r.risk_ratio}</div><div class="small">95% CI ${r.rr_ci[0]} to ${r.rr_ci[1]}</div></div>
+      <div class="card"><div class="lbl">${term(n.measure || "NNT/NNH", n.measure)}</div><div class="big">${n.value ?? "n/a"}</div><div class="small">ARD ${r.abs_risk_diff}</div></div>
       <div class="card"><div class="lbl">χ² p-value</div><div class="big">${r.p_value}</div><div class="small">χ²=${r.chi2}</div></div>
     </div>
-    <div class="small muted" style="margin-top:8px">${n.interpretation || ""} ${r.corrected ? "(Haldane–Anscombe correction applied)" : ""}</div>`;
+    <div class="small muted" style="margin-top:8px">${n.interpretation || ""} ${r.corrected ? "(Haldane-Anscombe correction applied)" : ""}</div>`;
 }
 async function runKM() {
   const d = await jpost("/api/epi/km", { time: $("kmTime").value, event: $("kmEvent").value, group: $("kmGroup").value || null });
@@ -753,7 +795,7 @@ async function runKM() {
   let h = `<img class="plot" src="${d.png}" style="max-width:560px">
     <div class="flex" style="margin-top:6px"><button class="ghost sm" onclick="dlPng('${d.png}','kaplan_meier.png')">PNG</button></div>
     <table style="margin-top:8px;width:auto"><tr><th>Group</th><th>N</th><th>Median survival</th></tr>`;
-  d.curves.forEach(c => h += `<tr><td>${c.name}</td><td>${c.n}</td><td>${c.median_survival ?? "not reached"}</td></tr>`);
+  d.curves.forEach(c => h += `<tr><td>${esc(c.name)}</td><td>${c.n}</td><td>${c.median_survival ?? "not reached"}</td></tr>`);
   h += `</table>`;
   if (d.logrank) h += `<div class="small" style="margin-top:6px">${term("Log-rank")} χ²=${d.logrank.test_statistic}, p=${d.logrank.p_value}</div>`;
   $("kmResult").innerHTML = h;
@@ -765,7 +807,7 @@ async function runCox() {
   if (d.error) { toast(d.error, "err"); return; }
   let h = `<div class="small muted">N=${d.n}, events=${d.n_events}, ${term("concordance")}=${d.concordance}</div>
     <table style="margin-top:6px"><tr><th>Covariate</th><th>${term("HR")}</th><th>95% CI</th><th>coef</th><th>p</th></tr>`;
-  d.rows.forEach(r => h += `<tr><td>${r.covariate}</td><td>${r.hazard_ratio}</td><td>${r.hr_lower}–${r.hr_upper}</td><td>${r.coef}</td><td>${r.p_value}</td></tr>`);
+  d.rows.forEach(r => h += `<tr><td>${esc(r.covariate)}</td><td>${r.hazard_ratio}</td><td>${r.hr_lower} to ${r.hr_upper}</td><td>${r.coef}</td><td>${r.p_value}</td></tr>`);
   $("coxResult").innerHTML = h + `</table>`;
 }
 async function runHL() {
@@ -784,7 +826,7 @@ async function runHL() {
 }
 
 // =====================================================================
-// 7. REPORTS
+// 7. reports
 // =====================================================================
 async function initReports() {
   const d = await jget("/api/session");
@@ -809,7 +851,7 @@ function toggleEditMethods() {
   const editing = p.getAttribute("contenteditable") === "true";
   p.setAttribute("contenteditable", editing ? "false" : "true");
   $("editMethodsBtn").textContent = editing ? "Edit" : "Done editing";
-  if (!editing) { p.focus(); toast("Editing locally — not saved to the server.", ""); }
+  if (!editing) { p.focus(); toast("Editing locally, not saved to the server.", ""); }
 }
 function expandMethods() {
   $("methodsModalSlot").appendChild($("methodsPaper"));
@@ -831,14 +873,19 @@ async function loadTripodReport() {
   ].map(([l, v]) => `<div class="card"><div class="lbl">${l}</div><div class="big">${v}</div></div>`).join("");
   const t = $("tripodTable"); t.innerHTML = "";
   t.appendChild(el("tr", {}, `<th>Section</th><th>Item</th><th>Status</th>`));
-  d.items.forEach(i => t.appendChild(el("tr", {}, `<td class="small">${i.section}</td>
-    <td class="small">${i.description}</td>
-    <td><span class="pill ${i.status}">${i.status.replace(/_/g, " ")}</span></td>`)));
+  d.items.forEach(i => t.appendChild(el("tr", {}, `<td class="small">${esc(i.section)}</td>
+    <td class="small">${esc(i.description)}</td>
+    <td><span class="pill ${esc(i.status)}">${esc(i.status.replace(/_/g, " "))}</span></td>`)));
 }
 
 // =====================================================================
 // downloads
 // =====================================================================
+function dlButton(label, onClick) {
+  const b = el("button", { className: "ghost sm", textContent: label });
+  b.onclick = onClick;
+  return b;
+}
 function dlPng(dataUrl, fname) { const a = el("a", { href: dataUrl, download: fname }); a.click(); }
 function dlBlob(text, fname, type = "text/csv") {
   const a = el("a", { href: URL.createObjectURL(new Blob([text], { type })), download: fname }); a.click();
@@ -848,10 +895,10 @@ function tableToCsv(table) {
     `"${c.textContent.replace(/"/g, '""').trim()}"`).join(",")).join("\n");
 }
 function dlTable(id, fname) { dlBlob(tableToCsv($(id)), fname); }
-function dlImpCsv(jsonStr, fname) {
-  const rows = JSON.parse(jsonStr);
+function dlImpCsv(rows, fname) {
   const keys = Object.keys(rows[0] || { feature: "", importance: "" });
-  const csv = keys.join(",") + "\n" + rows.map(r => keys.map(k => r[k]).join(",")).join("\n");
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;     // feature names can hold commas
+  const csv = keys.join(",") + "\n" + rows.map(r => keys.map(k => cell(r[k])).join(",")).join("\n");
   dlBlob(csv, fname);
 }
 
@@ -860,7 +907,7 @@ function dlImpCsv(jsonStr, fname) {
 // =====================================================================
 function applySessionMeta(m) {
   if (!m) { $("sessionTag").textContent = "No dataset loaded"; State.confirmed = false; return; }
-  $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${m.filename || "loaded"}</b><br>${m.n_rows || ""} rows`;
+  $("sessionTag").innerHTML = `Dataset: <b style="color:#fff">${esc(m.filename || "loaded")}</b><br>${m.n_rows || ""} rows`;
   State.confirmed = m.stage === "confirmed";
   State.coltypes = m.coltypes || {};
   document.querySelector('[data-tab="upload"]').classList.toggle("done", State.confirmed);
@@ -875,7 +922,7 @@ async function loadDatasetList() {
     const active = s.session_id === d.active;
     const label = s.filename || s.session_id;
     const item = el("div", { className: "ds-item" + (active ? " active" : "") });
-    item.innerHTML = `<span class="ds-label" title="${label}">${label}${s.n_rows ? ` · ${s.n_rows} rows` : ""}</span>
+    item.innerHTML = `<span class="ds-label" title="${esc(label)}">${esc(label)}${s.n_rows ? ` · ${s.n_rows} rows` : ""}</span>
       <span class="ds-x" title="Delete dataset">&times;</span>`;
     item.querySelector(".ds-label").addEventListener("click", () => switchDataset(s.session_id));
     item.querySelector(".ds-x").addEventListener("click", (e) => { e.stopPropagation(); deleteDataset(s.session_id, label); });
@@ -898,7 +945,7 @@ async function deleteDataset(sid, label) {
     `"${label}" and everything derived from it (splits, models trained on it) will be permanently deleted. This cannot be undone.`,
     "Delete");
   if (!ok) return;
-  const r = await fetch(`/api/sessions/${sid}`, { method: "DELETE" }).then(r => r.json());
+  const r = await jdelete(`/api/sessions/${encodeURIComponent(sid)}`);
   if (r.error) { toast(r.error, "err"); return; }
   const sess = await jget("/api/session");
   if (!sess.active) applySessionMeta(null);
@@ -915,14 +962,14 @@ function resetUploadTab() {
   $("previewTable").innerHTML = ""; $("typeTable").innerHTML = "";
   $("confirmMsg").textContent = "";
   $("smoteBox").style.display = "none";
-  $("stratCol").innerHTML = `<option value="">— none —</option>`;
+  $("stratCol").innerHTML = `<option value="">None</option>`;
 }
 
 $("clearAllBtn").addEventListener("click", async () => {
   const ok = await showConfirm("Clear all data?",
     "This permanently deletes every uploaded dataset on this machine. This cannot be undone.", "Clear all data");
   if (!ok) return;
-  const r = await fetch("/api/sessions", { method: "DELETE" }).then(r => r.json());
+  const r = await jdelete("/api/sessions");
   if (r.error) { toast(r.error, "err"); return; }
   applySessionMeta(null);
   resetUploadTab();
@@ -933,11 +980,11 @@ $("clearAllBtn").addEventListener("click", async () => {
 });
 
 // =====================================================================
-// Drag-to-select for checklist grids (model pick/delete, model training list).
-// Click-to-toggle one at a time still works as before; this adds
+// drag-to-select for checklist grids (model pick/delete, model training list).
+// click-to-toggle one at a time still works as before; this adds
 // click-and-drag across a grid of checkboxes to select/deselect a whole
 // run of them in one motion, so deleting a big batch of saved models
-// doesn't mean clicking every single one.
+// doesnt mean clicking every single one.
 // =====================================================================
 function enableDragSelect(container) {
   if (!container || container._dragSelectBound) return;
@@ -968,8 +1015,8 @@ function enableDragSelect(container) {
     document.body.style.userSelect = "none";
   });
 
-  // We drive the checked state ourselves on mousedown/mousemove so a drag
-  // can span many boxes in one gesture; without this, the browser's own
+  // we drive the checked state ourselves on mousedown/mousemove so a drag
+  // can span many boxes in one gesure; without this, the browser's own
   // click-driven toggle right after would flip the last box back.
   container.addEventListener("click", (e) => {
     const cb = checkboxFromNode(e.target);
@@ -993,4 +1040,5 @@ function enableDragSelect(container) {
 
 // restore session tag on load
 jget("/api/session").then(d => applySessionMeta(d.active ? d.meta : null));
+jget("/api/version").then(d => { if (d.version) $("appVersion").textContent = "· v" + d.version; });
 loadDatasetList();

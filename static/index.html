@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ClinTAB-ML</title>
 <link rel="icon" type="image/png" href="/static/assets/favicon.png">
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="/static/vendor/papaparse.min.js"></script>
 <style>
   :root{
     --bg:#f4f6f9; --panel:#ffffff; --ink:#1f2733; --muted:#6b7785;
@@ -69,7 +69,7 @@
   select,input[type=text],input[type=number],textarea{font:inherit;padding:7px 9px;
     border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);width:100%}
   textarea{font-family:ui-monospace,Menlo,monospace;font-size:12px}
-  /* Model Testing & Spline tabs only: unify control heights (dropdown/input/button) */
+  /* model testing & spline tabs only: unify control heights (dropdown/input/button) */
   #tab-test select,#tab-test input[type=text],#tab-test input[type=number],#tab-test button,
   #tab-spline select,#tab-spline input[type=text],#tab-spline input[type=number],#tab-spline button{
     height:38px;padding:0 16px}
@@ -98,6 +98,7 @@
   .pill.categorical{background:#fdf0e3;color:#a86511}
   .pill.continuous{background:#e8f6ee;color:#23774a}
   .pill.date{background:#efeaf7;color:#6b4fa0}
+  .pill.multiclass{background:#fdf0e3;color:#a86511}
   .pill.found{background:#e8f6ee;color:#23774a}
   .pill.not_found{background:#fdeceb;color:#a83a2c}
   .pill.not_applicable{background:#eef1f4;color:#5b6673}
@@ -114,7 +115,7 @@
     text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 16px}
   .paper p{margin:0;font-family:Georgia,'Times New Roman',serif;font-size:15px;
     line-height:1.75;color:#242a33;text-align:justify}
-  .paper p:empty::before{content:"Nothing logged yet — upload, train, or run an analysis first.";
+  .paper p:empty::before{content:"Nothing logged yet. Upload, train, or run an analysis first.";
     font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:var(--muted);
     font-style:italic;font-size:13px}
   .paper p[contenteditable="true"]{outline:2px dashed var(--brand);outline-offset:8px;
@@ -205,6 +206,13 @@
   .err-text{color:var(--err);font-size:12px}
   .ok-text{color:var(--ok);font-weight:600}
   .small{font-size:12px}
+  /* hover / focus definitions, text comes from the data-tip attribute */
+  .term{position:relative;border-bottom:1px dotted var(--muted);cursor:help}
+  .term:hover::after,.term:focus::after{content:attr(data-tip);position:absolute;left:0;top:100%;
+    margin-top:6px;width:max-content;max-width:260px;padding:8px 10px;border-radius:6px;
+    background:#16283d;color:#fff;font:400 12px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    text-transform:none;letter-spacing:0;white-space:normal;text-align:left;z-index:90;
+    box-shadow:0 6px 20px rgba(0,0,0,.25)}
   .flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .file-btn{display:inline-flex;align-items:center;margin:0;cursor:pointer;
     background:#eef3f9;color:var(--brand-d);padding:5px 10px;border-radius:7px;
@@ -247,15 +255,15 @@
     </div>
     <div class="side-footer">
       <img src="/static/assets/acai-icon.png" alt="" class="side-footer-icon">
-      <span>Applied Clinical AI Institute</span>
+      <span>Applied Clinical AI Initiative <span id="appVersion"></span></span>
     </div>
   </aside>
 
   <main>
-    <!-- ================= OVERVIEW ================= -->
+    <!-- ================= overview ================= -->
     <section class="section active" id="tab-overview">
       <h2>ClinTAB-ML</h2>
-      <p class="lead">A clinical machine-learning workbench for tabular registry data &mdash; upload a
+      <p class="lead">A clinical machine-learning workbench for tabular registry data. Upload a
         cohort, profile it, train and compare models, and get the diagnostics and reporting clinical
         prediction-model work actually requires.</p>
 
@@ -278,28 +286,28 @@
         <div class="accordion">
           <details class="acc-item">
             <summary><span class="acc-num">1</span> Data Upload</summary>
-            <p>Drop in a CSV and the app immediately profiles every column &mdash; binary, categorical,
-              continuous, or date &mdash; flags anything with heavy missing data, and lets you decide
+            <p>Drop in a CSV and the app immediately profiles every column (binary, categorical,
+              continuous, or date), flags anything with heavy missing data, and lets you decide
               column by column whether to keep, fill, or drop it. Set your train / validation / test
               split, random or stratified, and lock it in with one click.</p>
           </details>
           <details class="acc-item">
             <summary><span class="acc-num">2</span> Data Summary</summary>
             <p>Once the dataset is confirmed, every variable gets a full descriptive breakdown
-              automatically &mdash; means, medians, spread, and missingness for continuous variables;
+              automatically: means, medians, spread, and missingness for continuous variables;
               category counts and percentages for everything else. No extra clicks, it's just there.</p>
           </details>
           <details class="acc-item">
             <summary><span class="acc-num">3</span> Model Training</summary>
             <p>Pick an outcome and the model list narrows to whichever of the 15 actually make sense for
-              it &mdash; classifiers for binary or categorical outcomes, regressors for continuous ones.
+              it: classifiers for binary or categorical outcomes, regressors for continuous ones.
               Hyperparameters get tuned against a genuinely held-out validation set (or k-fold CV, your
               call), and you watch it happen live instead of staring at a blank terminal.</p>
           </details>
           <details class="acc-item">
             <summary><span class="acc-num">4</span> Model Testing</summary>
             <p>Run any saved model against the test set or a brand-new file. ROC, precision-recall,
-              confusion matrices, calibration plots &mdash; all rendered instantly, with multiple models
+              confusion matrices, calibration plots, all rendered instantly, with multiple models
               overlaid on the same chart so comparing them is a glance, not a spreadsheet.</p>
           </details>
           <details class="acc-item">
@@ -311,8 +319,8 @@
           <details class="acc-item">
             <summary><span class="acc-num">6</span> Clinical Epi</summary>
             <p>The calculators every clinical paper eventually needs: odds ratios and risk ratios from a
-              2&times;2 table, Kaplan&ndash;Meier survival curves, Cox regression, Hosmer&ndash;Lemeshow
-              calibration &mdash; the kind of thing that usually means switching between three different
+              2&times;2 table, Kaplan-Meier survival curves, Cox regression, Hosmer-Lemeshow
+              calibration, the kind of thing that usually means switching between three different
               tools.</p>
           </details>
           <details class="acc-item">
@@ -327,7 +335,7 @@
       <button onclick="goToUpload()">Get started &rarr;</button>
     </section>
 
-    <!-- ================= UPLOAD ================= -->
+    <!-- ================= upload ================= -->
     <section class="section" id="tab-upload">
       <h2>Data Upload</h2>
       <p class="lead">Drop a CSV. Columns are auto-typed; override anything, set the split, then confirm.</p>
@@ -351,7 +359,7 @@
         <p class="hint">Auto-detected: <b>binary</b>=2 values, <b>categorical</b>=strings or &lt;10 integers,
           <b>continuous</b>=numeric &gt;10 values. Any column with missing data gets a handling choice,
           defaulted by how much is missing: under 30% is imputed (median for numeric columns, most
-          frequent value for categorical), 30&ndash;50% is filled with 0, and over 50% is removed.
+          frequent value for categorical), 30 to 50% is filled with 0, and over 50% is removed.
           Override any column's choice as needed.</p>
         <div class="scroll"><table id="typeTable"></table></div>
       </div>
@@ -365,7 +373,7 @@
           <div><label>Method</label>
             <select id="splitMethod"><option value="random">Random</option>
               <option value="stratified">Stratified</option></select></div>
-          <div><label>Stratify / SMOTE column</label><select id="stratCol"><option value="">— none —</option></select></div>
+          <div><label>Stratify / SMOTE column</label><select id="stratCol"><option value="">None</option></select></div>
         </div>
         <div id="smoteBox" style="margin-top:12px;display:none">
           <label class="flex" style="font-weight:600;color:var(--ink)">
@@ -379,7 +387,7 @@
       </div>
     </section>
 
-    <!-- ================= SUMMARY ================= -->
+    <!-- ================= summary ================= -->
     <section class="section" id="tab-summary">
       <h2>Data Summary</h2>
       <p class="lead">Descriptive statistics of the confirmed dataset.</p>
@@ -396,7 +404,7 @@
       </div>
     </section>
 
-    <!-- ================= TRAIN ================= -->
+    <!-- ================= train ================= -->
     <section class="section" id="tab-train">
       <h2>Model Training</h2>
       <p class="lead">Pick an outcome and models, tune on the validation set, stream progress.</p>
@@ -436,6 +444,9 @@
             <button class="ghost sm" onclick="toggleModels(false)">Clear</button>
             <label class="flex" style="margin-left:auto;font-weight:600;color:var(--ink)">
               <input type="checkbox" id="gridToggle" checked> <span class="term" tabindex="0" data-tip="Automatically trying different model settings (hyperparameters) to find the combination that scores best.">Grid search</span></label>
+            <label class="flex" style="font-weight:600;color:var(--ink)">
+              <span class="term" tabindex="0" data-tip="Score each candidate with k-fold cross-validation inside the training set instead of the single validation set. Helps on small datasets. Leave empty for the validation set.">CV folds</span>
+              <input type="number" id="cvFolds" min="2" max="20" placeholder="off" style="width:72px"></label>
             <label class="flex" style="font-weight:600;color:var(--ink)" id="smoteTrainBox">
               <input type="checkbox" id="smoteTrain"> <span class="term" tabindex="0" data-tip="A technique for rare outcomes: creates synthetic extra examples of the minority class so the model doesn't just learn to predict the common outcome.">SMOTE</span></label>
           </div>
@@ -463,7 +474,7 @@
       </div>
     </section>
 
-    <!-- ================= TEST ================= -->
+    <!-- ================= test ================= -->
     <section class="section" id="tab-test">
       <h2>Model Testing</h2>
       <p class="lead">Evaluate saved models on the held-out test set or a new CSV. Overlay multiple ROC/PR curves.</p>
@@ -511,7 +522,7 @@
       </div>
     </section>
 
-    <!-- ================= SPLINE ================= -->
+    <!-- ================= spline ================= -->
     <section class="section" id="tab-spline">
       <h2><span class="term" tabindex="0" data-tip="A smooth curve, allowed to bend only at its knots, fit through the data instead of a straight line.">Restricted Cubic Spline</span></h2>
       <p class="lead">Log-odds of a binary outcome across a continuous predictor, knots marked.</p>
@@ -527,13 +538,13 @@
       </div>
     </section>
 
-    <!-- ================= EPI ================= -->
+    <!-- ================= epi ================= -->
     <section class="section" id="tab-epi">
       <h2>Clinical Epidemiology</h2>
       <p class="lead">2×2 measures, survival analysis, and goodness-of-fit.</p>
 
       <div class="panel">
-        <h3><span class="term" tabindex="0" data-tip="How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.">Odds ratio</span> / <span class="term" tabindex="0" data-tip="How much more likely the outcome is, in plain risk/probability terms, for the exposed group.">Risk ratio</span> / <span class="term" tabindex="0" data-tip="Number needed to treat/harm — how many patients you'd need to treat (or expose) to cause one additional good (or bad) outcome.">NNT&ndash;NNH</span> (<span class="term" tabindex="0" data-tip="The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.">2&times;2 table</span>)</h3>
+        <h3><span class="term" tabindex="0" data-tip="How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.">Odds ratio</span> / <span class="term" tabindex="0" data-tip="How much more likely the outcome is, in plain risk/probability terms, for the exposed group.">Risk ratio</span> / <span class="term" tabindex="0" data-tip="Number needed to treat/harm. How many patients you'd need to treat (or expose) to cause one additional good (or bad) outcome.">NNT / NNH</span> (<span class="term" tabindex="0" data-tip="The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.">2&times;2 table</span>)</h3>
         <table style="width:auto"><tr><th></th><th>Outcome +</th><th>Outcome −</th></tr>
           <tr><th>Exposed</th><td><input id="ea" type="number" value="20" style="width:90px"></td><td><input id="eb" type="number" value="80" style="width:90px"></td></tr>
           <tr><th>Unexposed</th><td><input id="ec" type="number" value="10" style="width:90px"></td><td><input id="ed" type="number" value="90" style="width:90px"></td></tr></table>
@@ -544,12 +555,12 @@
       <div class="panel" id="survPanel">
         <div id="epiEmpty" class="muted">Confirm a dataset to use survival &amp; calibration tools.</div>
         <div id="epiBody" style="display:none">
-          <h3><span class="term" tabindex="0" data-tip="A curve showing the fraction of patients who have not yet had an event (like death) over time.">Kaplan&ndash;Meier</span> &amp; <span class="term" tabindex="0" data-tip="A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.">Cox proportional hazards</span></h3>
+          <h3><span class="term" tabindex="0" data-tip="A curve showing the fraction of patients who have not yet had an event (like death) over time.">Kaplan-Meier</span> &amp; <span class="term" tabindex="0" data-tip="A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.">Cox proportional hazards</span></h3>
           <div class="row">
             <div><label>Time / duration</label><select id="kmTime"></select></div>
             <div><label>Event (1=event)</label><select id="kmEvent"></select></div>
-            <div><label>Group (KM, optional)</label><select id="kmGroup"><option value="">— none —</option></select></div>
-            <div style="display:flex;align-items:flex-end"><button onclick="runKM()">Kaplan–Meier</button></div>
+            <div><label>Group (KM, optional)</label><select id="kmGroup"><option value="">None</option></select></div>
+            <div style="display:flex;align-items:flex-end"><button onclick="runKM()">Kaplan-Meier</button></div>
           </div>
           <div id="kmResult" style="margin-top:12px"></div>
           <div style="margin-top:16px"><label>Cox covariates</label>
@@ -557,7 +568,7 @@
             <div class="flex" style="margin-top:8px"><button onclick="runCox()">Fit Cox model</button></div></div>
           <div id="coxResult" style="margin-top:12px"></div>
 
-          <h3 style="margin-top:22px"><span class="term" tabindex="0" data-tip="A test checking whether a model's predicted probabilities match the real observed event rates.">Hosmer&ndash;Lemeshow</span> calibration</h3>
+          <h3 style="margin-top:22px"><span class="term" tabindex="0" data-tip="A test checking whether a model's predicted probabilities match the real observed event rates.">Hosmer-Lemeshow</span> calibration</h3>
           <div class="row">
             <div><label>Saved binary model</label><select id="hlModel"></select></div>
             <div style="display:flex;align-items:flex-end"><button onclick="runHL()">Run on test set</button></div>
@@ -567,15 +578,15 @@
       </div>
     </section>
 
-    <!-- ================= REPORTS ================= -->
+    <!-- ================= reports ================= -->
     <section class="section" id="tab-reports">
       <h2>Reports</h2>
-      <p class="lead">Assembled from everything logged during this session &mdash; every upload, split, model trained, and calculation run.</p>
+      <p class="lead">Assembled from everything logged during this session: every upload, split, model trained, and calculation run.</p>
       <div id="reportsEmpty" class="panel muted">Confirm a dataset first.</div>
       <div id="reportsBody" style="display:none">
         <div class="panel">
           <h3>Methods text</h3>
-          <p class="hint">Deterministically assembled from this session's logged actions &mdash; not AI-generated, and not a substitute for your own review. Edit before pasting into a manuscript.</p>
+          <p class="hint">Deterministically assembled from this session's logged actions. It is not AI-generated and not a substitute for your own review. Edit before pasting into a manuscript.</p>
           <div class="flex" style="margin-bottom:8px">
             <button class="ghost sm" onclick="loadMethodsText()">Refresh</button>
             <button class="ghost sm" onclick="copyMethodsText()">Copy</button>
@@ -636,7 +647,7 @@
   <div class="panel" style="max-width:420px;width:100%;margin:0;text-align:center">
     <div class="train-done-icon err">!</div>
     <h3 style="margin:0 0 6px" id="confirmTitle">Are you sure?</h3>
-    <p class="muted" id="confirmMsg" style="margin:0 0 20px"></p>
+    <p class="muted" id="confirmModalMsg" style="margin:0 0 20px"></p>
     <div class="flex" style="justify-content:center">
       <button class="ghost" id="confirmCancel">Cancel</button>
       <button id="confirmOk" style="background:var(--err)">Delete</button>

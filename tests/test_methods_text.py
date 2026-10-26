@@ -42,7 +42,7 @@ def test_generate_methods_text_train_model_with_cv_folds(session_id):
     assert "LogisticRegression model was trained to predict mortality_30d" in text
     assert "5-fold cross-validation" in text
     assert "area under the receiver operating characteristic curve (AUROC)" in text
-    assert "(validation AUROC=0.81)" in text  # F1 isn't in _METRIC_ORDER, so it's omitted
+    assert "(validation AUROC=0.81)" in text  # f1 isn't in the metric order list, so it's omitted
 
 
 def test_generate_methods_text_train_model_without_cv_folds_mentions_val_set(session_id):
@@ -73,9 +73,9 @@ def test_generate_methods_text_covers_spline_km_cox_hl(session_id):
 
     text = methods_text.generate_methods_text(session_id)
     assert "restricted cubic spline with 4 knots" in text
-    assert "Kaplan–Meier" in text and "stratified by sex" in text and "p=0.03" in text
+    assert "Kaplan-Meier" in text and "stratified by sex" in text and "p=0.03" in text
     assert "Cox proportional-hazards regression" in text and "age, diabetes" in text
-    assert "Hosmer–Lemeshow" in text and "p=0.65" in text
+    assert "Hosmer-Lemeshow" in text and "p=0.65" in text
 
 
 def test_generate_methods_text_includes_validation_metrics_parenthetical(session_id):
@@ -100,7 +100,7 @@ def test_generate_methods_text_groups_two_models_under_same_protocol(session_id)
 
     text = methods_text.generate_methods_text(session_id)
     assert "A RandomForest (validation AUROC=0.66) was trained under the same protocol." in text
-    assert ", and" not in text  # exactly two models: "X and Y", no serial comma
+    assert ", and" not in text  # exactly two models: "x and y", no serial comma
 
 
 def test_generate_methods_text_groups_three_models_with_plain_and(session_id):
@@ -139,3 +139,35 @@ def test_generate_methods_text_is_deterministic(session_id):
     first = methods_text.generate_methods_text(session_id)
     second = methods_text.generate_methods_text(session_id)
     assert first == second
+
+
+def test_train_model_without_tuning_does_not_claim_hyperparameter_tuning(session_id):
+    analysis_log.log_action(session_id, "train_model",
+                            inputs={"model": "LogisticRegression", "outcome": "y",
+                                    "scoring": "roc", "smote": False, "cv_folds": None,
+                                    "tuned": False},
+                            outputs={"metrics": {"AUROC": 0.7}})
+    text = methods_text.generate_methods_text(session_id)
+    assert "default hyperparameters" in text
+    assert "tuned" not in text
+
+
+def test_article_reads_acronyms_letter_by_letter():
+    assert methods_text._article("SVM") == "An"
+    assert methods_text._article("KNN") == "A"
+    assert methods_text._article("ElasticNetLogistic") == "An"
+    assert methods_text._article("RandomForest") == "A"
+
+
+def test_custom_split_is_reported_until_the_dataset_is_confirmed_again(session_id):
+    analysis_log.log_action(session_id, "confirm", inputs={"method": "random"},
+                            outputs={"n_train": 70, "n_val": 15, "n_test": 15})
+    analysis_log.log_action(session_id, "upload_custom_split",
+                            outputs={"n_train": 80, "n_val": 20})
+    text = methods_text.generate_methods_text(session_id)
+    assert "replaced by user-supplied files" in text
+    assert "training (n=80)" in text
+
+    analysis_log.log_action(session_id, "confirm", inputs={"method": "random"},
+                            outputs={"n_train": 70, "n_val": 15, "n_test": 15})
+    assert "user-supplied" not in methods_text.generate_methods_text(session_id)

@@ -2,7 +2,7 @@
 """clintab_cli.py
 Terminal access to the full ClinTAB-ML feature set, built directly on
 the same pure modules the web app uses (clintab/ml.py / stats.py / spline.py /
-epi.py / plots.py / store.py). No Flask -- this is the scriptable path for
+epi.py / plots.py / store.py). No Flask, this is the scriptable path for
 batch runs.
 
     python clintab_cli.py summarize --csv Data/sample_clinical.csv
@@ -122,16 +122,18 @@ def cmd_train(a):
     print(f"\nTraining {len(models)} model(s) | task={task} | features={len(feat_cols)} "
           f"| split {len(tr)}/{len(va)}/{len(te)} | scoring={a.scoring} | smote={a.smote}\n")
 
-    rows = []
+    rows, trained = [], {}
     for name in models:
-        print(f"  … {name}")
+        print(f"  ... {name}")
         pipe, info = ml.train_one_model(name, tr, va, a.outcome, feat_cols, task,
                                         scoring=a.scoring, use_smote=a.smote,
                                         do_grid_search=not a.no_grid,
                                         coltypes=coltypes, cv_folds=a.cv_folds)
-        vmetrics, _ = ml.evaluate(pipe, va, a.outcome, feat_cols, task, threshold=a.threshold)
+        trained[name] = (pipe, info.get("classes"))
+        vmetrics, _ = ml.evaluate(pipe, va, a.outcome, feat_cols, task,
+                                  threshold=a.threshold, classes=info.get("classes"))
         ts = store.timestamp()
-        base = f"{name}_{a.outcome}_{ts}".replace(" ", "_")
+        base = store.model_base_name(name, a.outcome, ts)
         joblib.dump({"pipe": pipe, "feat_cols": feat_cols, "outcome": a.outcome,
                      "task": task, "classes": info.get("classes"), "threshold": a.threshold},
                     store.model_path(base))
@@ -140,7 +142,8 @@ def cmd_train(a):
                        "scoring": a.scoring, "best_params": info["best_params"],
                        "val_metrics": vmetrics, "features": feat_cols, "created": ts},
                       fh, indent=2, default=str)
-        imp = ml.feature_importance(pipe, va, a.outcome, feat_cols, task)
+        imp = ml.feature_importance(pipe, va, a.outcome, feat_cols, task,
+                                    classes=info.get("classes"))
         imp.to_csv(os.path.join(store.EXPORTS, f"{base}_importance.csv"), index=False)
         rows.append({"model": name, **vmetrics})
         print(f"    saved -> models/{base}.pkl  (top feature: {imp.iloc[0]['feature']})")
@@ -153,10 +156,9 @@ def cmd_train(a):
         print("\nHeld-out test-set metrics:")
         trows = []
         for name in models:
-            mp = [p for p in os.listdir(store.MODELS) if p.startswith(name + "_" + a.outcome) and p.endswith(".pkl")]
-            mp.sort()
-            mdl = joblib.load(store.model_path(mp[-1][:-4]))
-            m, _ = ml.evaluate(mdl["pipe"], te, a.outcome, feat_cols, task, threshold=a.threshold)
+            pipe, classes = trained[name]
+            m, _ = ml.evaluate(pipe, te, a.outcome, feat_cols, task,
+                               threshold=a.threshold, classes=classes)
             trows.append({"model": name, **m})
         table(trows, headers)
 
@@ -172,7 +174,8 @@ def cmd_test(a):
         if mdl["outcome"] is None or mdl["outcome"] not in df.columns:
             print(f"  ! {name}: no outcome column recorded for this model, skipping.")
             continue
-        m, c = ml.evaluate(mdl["pipe"], df, mdl["outcome"], mdl["feat_cols"], mdl["task"], a.threshold)
+        m, c = ml.evaluate(mdl["pipe"], df, mdl["outcome"], mdl["feat_cols"], mdl["task"],
+                           a.threshold, mdl.get("classes"))
         headers = headers or (["model"] + list(m))
         rows.append({"model": name, **m})
         if mdl["task"] == "binary":
@@ -215,7 +218,9 @@ def cmd_epi(a):
     elif a.epi_cmd == "hl":
         df = pd.read_csv(a.csv)
         mdl = joblib.load(store.model_path(a.model))
-        y, _ = ml.encode_outcome(df[mdl["outcome"]], "binary")
+        if not isinstance(mdl, dict) or mdl.get("task") != "binary":
+            sys.exit("Hosmer-Lemeshow needs a binary model trained with ClinTAB-ML.")
+        y, _ = ml.encode_outcome(df[mdl["outcome"]], "binary", mdl.get("classes"))
         mask = ~pd.isna(y)
         sc = ml.predict_scores(mdl["pipe"], df[mdl["feat_cols"]][mask], "binary")
         res = epi.hosmer_lemeshow(np.asarray(y)[mask], sc)
