@@ -23,7 +23,7 @@ It has 600 rows and 11 columns:
 | `admit_date`      | Admission date                                         |
 | `rare_lab`        | A lab value populated for only ~42% of rows            |
 
-`rare_lab` is deliberately sparse — it's there so the missing-data handling
+`rare_lab` is deliberately sparse. It's there so the missing-data handling
 step (include / zero-fill / drop column) has a real column to demonstrate on.
 Every other column is fully populated.
 

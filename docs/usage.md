@@ -1,7 +1,7 @@
 # Usage
 
-This walks through one realistic end-to-end example — profiling a cohort,
-training and evaluating a model, and running a clinical-epi calculation —
+This walks through one realistic end-to-end example (profiling a cohort,
+training and evaluating a model, and running a clinical-epi calculation)
 using both the CLI and the web app. All commands below use the synthetic
 cohort at `Data/sample_clinical.csv` (see [`Data/README.md`](../Data/README.md)
 for what's in it).
@@ -35,7 +35,7 @@ Card: {'total_n': 600, 'n_columns': 11, 'complete_cases': 254,
 ```
 
 Column types (binary / categorical / continuous / date) and missingness are
-detected automatically — this is the same logic the web app's Data Upload
+detected automatically. This is the same logic the web app's Data Upload
 step uses to pre-fill its column-type form.
 
 ## 2. Train a model
@@ -97,7 +97,7 @@ For every 10.0 patients exposed, one additional event occurs (number needed to h
 
 `a`/`b`/`c`/`d` are the four cells of a 2x2 exposure/outcome table (see the
 convention documented at the top of `clintab/epi.py`). The other epi
-subcommands (`km`, `cox`, `hl`) work the same way against a CSV — see
+subcommands (`km`, `cox`, `hl`) work the same way against a CSV, see
 `python clintab_cli.py epi -h`.
 
 ## Using the web app instead
@@ -107,8 +107,8 @@ subcommands (`km`, `cox`, `hl`) work the same way against a CSV — see
 ```
 
 Open `http://127.0.0.1:5000`, upload `Data/sample_clinical.csv`, and the
-same six steps (Data Upload → Data Summary → Model Training → Model Testing
-→ Spline → Clinical Epi) are available from one page, with live progress and
+same seven steps (Data Upload → Data Summary → Model Training → Model Testing
+→ Spline → Clinical Epi → Reports) are available from one page, with live progress and
 inline charts instead of terminal output. Models trained from the CLI and
 the web app share the same `models/` folder, so either one can evaluate
 what the other trained. See the main [README](../README.md) for a full

@@ -2,13 +2,26 @@
 
 ## Requirements
 
-- Python 3.9 or later
+- Python 3.10 or later (tested on 3.10 and 3.12)
 - pip
 
 All Python dependencies are pinned to minimum versions in
 [`requirements.txt`](../requirements.txt): Flask, pandas, numpy,
 scikit-learn, imbalanced-learn, matplotlib, scipy, statsmodels, patsy,
 lifelines, joblib, and gunicorn.
+
+## Desktop app (no Python needed)
+
+Clinicians should use the installer from the
+[latest release](https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/latest)
+instead of anything below. See "For clinicians" in the main README, and
+[`packaging/README.md`](../packaging/README.md) for how the installers are built.
+
+To run the desktop launcher from source (opens the browser and the control window):
+
+```bash
+python clintab_desktop.py
+```
 
 ## Quick install (recommended)
 
@@ -46,7 +59,7 @@ pytest tests/ -v
 
 ## Running the CLI instead of the web app
 
-No separate install step — the CLI (`clintab_cli.py`) uses the same
+No separate install step. The CLI (`clintab_cli.py`) uses the same
 dependencies as the web app:
 
 ```bash
@@ -58,22 +71,24 @@ python clintab_cli.py summarize --csv Data/sample_clinical.csv
 ```bash
 ./run.sh prod
 # or directly:
-gunicorn -w 1 -k gthread --threads 8 --timeout 600 -b 0.0.0.0:5000 "app:create_app()"
+gunicorn -w 1 -k gthread --threads 8 --timeout 600 -b 127.0.0.1:5000 "app:create_app()"
 ```
 
-Use exactly **one** gunicorn worker with threads — the training progress
+Use exactly **one** gunicorn worker with threads. The training progress
 stream (Server-Sent Events) and the Flask session need to stay on the same
-process; threads handle concurrent requests fine for a research tool. Set
-the `CLINTAB_SECRET` environment variable before exposing this beyond your
-own machine (see the Known limitations section of the main README).
+process; threads handle concurrent requests fine for a research tool. Both
+commands bind `127.0.0.1` (change it with `HOST`). The app has no login and
+loads uploaded model pickles, so only expose it beyond your own machine behind
+an authenticating reverse proxy, and set `CLINTAB_SECRET` (see Known limitations
+in the main README).
 
 ## Troubleshooting
 
 - **`ModuleNotFoundError: No module named 'lifelines'`** (or any other
-  package) — the environment `python`/`pip` is resolving to isn't the one you
+  package): the environment `python`/`pip` is resolving to isn't the one you
   installed `requirements.txt` into. Confirm `which python3` and `which pip`
   point into `.venv`, or re-run `pip install -r requirements.txt`.
-- **Port already in use** — set a different port: `PORT=5050 python app.py`.
-- **CSV upload fails to parse** — the app reads uploads with
+- **Port already in use.** Set a different port: `PORT=5050 python app.py`.
+- **CSV upload fails to parse.** The app reads uploads with
   `pandas.read_csv`; make sure the file is a standard comma-separated CSV
   with a header row.

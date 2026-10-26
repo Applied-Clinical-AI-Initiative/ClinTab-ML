@@ -1,7 +1,7 @@
 # Contributing to ClinTAB-ML
 
 Thanks for considering a contribution. This project follows the
-[Code of Conduct](CODE_OF_CONDUCT.md) — please read it before participating.
+[Code of Conduct](CODE_OF_CONDUCT.md). Please read it before participating.
 
 ## Dev setup
 
@@ -23,12 +23,11 @@ including running the web app or the CLI once dependencies are installed.
 pytest tests/ -v
 ```
 
-The suite covers `clintab/stats.py`, `clintab/epi.py`, `clintab/ml.py`, and
-`clintab/spline.py`. Any change to those modules should come with a test
-covering the new behavior, and any bug fix should come with a test that
-would have caught it. `clintab/plots.py`, `clintab/store.py`, `app.py`, and
-`routes.py` aren't currently under test — a PR adding coverage there is
-welcome.
+The suite covers everything in `clintab/` except `plots.py`, plus the HTTP
+routes (`tests/test_routes.py`). Any change to those modules should come with a
+test covering the new behavior, and any bug fix should come with a test that
+would have caught it. `clintab/plots.py`, `clintab_cli.py` and the front end
+(`static/`) aren't under test, and a PR adding coverage there is welcome.
 
 CI (`.github/workflows/tests.yml`) runs this same suite on every push and
 pull request against `main`, across Python 3.10 and 3.12.
@@ -38,13 +37,13 @@ pull request against `main`, across Python 3.10 and 3.12.
 There's no configured linter or formatter in this repo yet. Match the
 existing style in the file you're editing: minimal comments (only where the
 *why* isn't obvious from the code), no unused imports, and keep Flask/HTTP
-concerns in `routes.py` / `app.py` out of `clintab/` — those modules are
+concerns in `routes.py` / `app.py` out of `clintab/`. Those modules are
 pure Python (pandas/numpy/sklearn in, plain dicts/DataFrames out) so they
 stay importable and testable without a running server.
 
 ## Branch and PR conventions
 
-- One logical change per branch and per PR — don't bundle unrelated fixes
+- One logical change per branch and per PR. Don't bundle unrelated fixes
   together.
 - Branch off an up-to-date `main`:
   ```bash
@@ -56,14 +55,14 @@ stay importable and testable without a running server.
 - Open an issue describing the bug or feature before starting work on
   anything non-trivial, and reference it in your commits and PR
   (`Closes #123`) so it closes automatically on merge.
-- Fill in the PR template — summary, linked issue, and the tests/docs/CI
+- Fill in the PR template: summary, linked issue, and the tests/docs/CI
   checklist.
 - Keep commits scoped and messages descriptive; squash-merge is fine for
   keeping `main`'s history clean.
 
 ## Reporting bugs / requesting features
 
-Use the issue templates under **New Issue** on GitHub — bug report or
+Use the issue templates under **New Issue** on GitHub, bug report or
 feature request, whichever fits. Include reproduction steps for bugs, and
 the problem you're trying to solve (not just the solution) for feature
 requests.
