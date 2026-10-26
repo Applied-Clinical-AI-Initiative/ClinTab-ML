@@ -152,7 +152,7 @@ Flask. That keeps the analysis modules importable and testable without a server:
 | `clintab/tripod_report.py` | TRIPOD+AI reporting coverage built from the log. | **no** |
 | `static/index.html` + `static/app.js` | The single-page UI (PapaParse is bundled in `static/vendor/`). | n/a |
 | `clintab_desktop.py` + `packaging/` | Desktop launcher and the installer builds, see `packaging/README.md`. | yes |
-| `paper/` | JOSS paper and the scripts and aggregate results behind the manuscript, see `paper/analysis/README.md`. | n/a |
+| `paper/` | JOSS paper and the scripts behind the manuscript (no NSQIP data or results), see `paper/analysis/README.md`. | n/a |
 
 Everything in `clintab/` is pure and importable on its own.
 

@@ -31,9 +31,9 @@ First tagged release.
 - `clintab.__version__`, a `/api/version` endpoint, and the version in the
   sidebar footer.
 - Redesigned toast and warning dialogs (#44).
-- `paper/`: the JOSS paper and `paper/analysis/`, the scripts and aggregate
-  results behind the manuscript (validation experiments 1 to 4). Row-level NSQIP
-  PUF data is not included, and `.gitignore` blocks it.
+- `paper/`: the JOSS paper and `paper/analysis/`, the scripts behind the
+  manuscript (validation experiments 1 to 4). No NSQIP data and no results
+  derived from it are in the repository; `.gitignore` and a CI check block them.
 - Automated test suite (`tests/`) covering the analysis modules, the analysis
   log, methods text, TRIPOD+AI report and the HTTP routes, run via `pytest`.
 - `requirements-dev.txt`, `Data/README.md` for the synthetic `sample_clinical.csv`,

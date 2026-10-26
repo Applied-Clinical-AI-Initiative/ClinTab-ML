@@ -26,11 +26,12 @@ y1_test_predictions.csv
 *.joblib
 
 # ---------------------------------------------------------------------------
-# paper working files. paper/paper.md, paper.bib, figure_optimism.png and
-# paper/analysis/ ship; the manuscript drafts, cover letter, facts sheet and
-# notes in paper/v2/ are rebuilt by paper/analysis/run_all.py and stay local.
+# paper. paper/paper.md, paper.bib, figure_optimism.png and the scripts in
+# paper/analysis/ ship. paper/analysis/results/ holds the outputs of the nsqip
+# analysis and never goes to github, nor do the drafts and notes in paper/v2/.
 # ---------------------------------------------------------------------------
 /paper/v2/
+/paper/analysis/results/
 
 # local documents that are not part of the release
 /*.pdf
@@ -124,5 +125,3 @@ dmypy.json
 ._*
 Thumbs.db
 desktop.ini
-
-/paper/analysis/
