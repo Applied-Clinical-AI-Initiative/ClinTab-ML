@@ -1,0 +1,110 @@
+name: Desktop app
+
+# builds the double-click desktop app on windows, macos and linux, runs the
+# packaged self test, and attaches the files to the github release. it starts
+# when a release is published, or by hand from the actions tab ("run
+# workflow") to try a build without releasing anything.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows
+            os: windows-latest
+          - name: macos-arm64
+            os: macos-latest
+          - name: linux-x64
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -r packaging/requirements-build.txt pytest
+
+      - name: Version matches the release tag
+        shell: bash
+        run: |
+          VERSION=$(python -c "import clintab; print(clintab.__version__)")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [ "${{ github.event_name }}" = "release" ] && [ "${{ github.event.release.tag_name }}" != "v$VERSION" ]; then
+            echo "tag ${{ github.event.release.tag_name }} does not match clintab.__version__ $VERSION"; exit 1
+          fi
+
+      - name: Tests
+        run: python -m pytest tests -q
+
+      - name: Build
+        run: pyinstaller packaging/clintab.spec --noconfirm --clean
+
+      - name: Self test (linux)
+        if: runner.os == 'Linux'
+        run: ./dist/ClinTAB-ML/ClinTAB-ML --self-test
+
+      - name: Self test (macos)
+        if: runner.os == 'macOS'
+        run: ./dist/ClinTAB-ML.app/Contents/MacOS/ClinTAB-ML --self-test
+
+      - name: Self test (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # the exe is a windowed app, so wait for it and read its exit code
+          $p = Start-Process -FilePath "dist\ClinTAB-ML\ClinTAB-ML.exe" -ArgumentList "--self-test" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "self test failed with exit code $($p.ExitCode)"; exit 1 }
+
+      - name: Package (windows installer + portable zip)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$env:VERSION" packaging\windows-installer.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Compress-Archive -Path dist\ClinTAB-ML -DestinationPath "dist\ClinTAB-ML-$env:VERSION-windows-portable.zip"
+
+      - name: Package (macos disk image)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p dmg && cp -R dist/ClinTAB-ML.app dmg/ && ln -s /Applications dmg/Applications
+          hdiutil create -volname "ClinTAB-ML" -srcfolder dmg -ov -format UDZO "dist/ClinTAB-ML-$VERSION-macos-arm64.dmg"
+
+      - name: Package (linux tarball)
+        if: runner.os == 'Linux'
+        run: tar -C dist -czf "dist/ClinTAB-ML-$VERSION-linux-x64.tar.gz" ClinTAB-ML
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ClinTAB-ML-${{ matrix.name }}
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*.dmg
+            dist/*.tar.gz
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: github.event_name == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.exe dist/*.zip dist/*.dmg dist/*.tar.gz)
+          gh release upload "${{ github.event.release.tag_name }}" "${files[@]}" --clobber
