@@ -36,8 +36,18 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install
-        run: pip install -r packaging/requirements-build.txt pytest
+      - name: Install (pinned versions)
+        run: pip install -r packaging/requirements-build.txt -c packaging/constraints.txt pytest
+
+      - name: Use numpy and scipy builds that run on macOS 12
+        if: runner.os == 'macOS'
+        # pip on a new mac picks the macos 14 only builds, which make the app
+        # crash at start on older macs. swap in the macos 11 / 12 builds.
+        run: |
+          pip download numpy scipy -c packaging/constraints.txt --only-binary=:all: --no-deps \
+            --platform macosx_12_0_arm64 --python-version 3.12 --implementation cp -d mac12
+          pip install --force-reinstall --no-deps mac12/*.whl
+          python -c "import numpy, scipy; print('numpy', numpy.__version__, 'scipy', scipy.__version__)"
 
       - name: Version matches the release tag
         shell: bash
@@ -69,6 +79,30 @@ jobs:
           # the exe is a windowed app, so wait for it and read its exit code
           $p = Start-Process -FilePath "dist\ClinTAB-ML\ClinTAB-ML.exe" -ArgumentList "--self-test" -Wait -PassThru
           if ($p.ExitCode -ne 0) { Write-Error "self test failed with exit code $($p.ExitCode)"; exit 1 }
+
+      # the self test never opens the window. these open the real one, wait for
+      # the server, close it, and fail the build if any of that goes wrong.
+      - name: Window test (macos)
+        if: runner.os == 'macOS'
+        run: ./dist/ClinTAB-ML.app/Contents/MacOS/ClinTAB-ML --gui-smoke
+
+      - name: Window test (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "dist\ClinTAB-ML\ClinTAB-ML.exe" -ArgumentList "--gui-smoke" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Write-Error "window test failed with exit code $($p.ExitCode)"; exit 1 }
+
+      - name: Window test (linux)
+        if: runner.os == 'Linux'
+        run: |
+          if command -v xvfb-run >/dev/null; then xvfb-run -a ./dist/ClinTAB-ML/ClinTAB-ML --gui-smoke
+          else echo "no xvfb on this runner, skipping"; fi
+
+      - name: Show the app log if anything failed
+        if: failure()
+        shell: bash
+        run: find "$HOME" "${LOCALAPPDATA:-/nonexistent}" "${TMPDIR:-/tmp}" -name clintab-desktop.log -exec sh -c 'echo "== $1"; tail -60 "$1"' _ {} \; 2>/dev/null || true
 
       - name: Package (windows installer + portable zip)
         if: runner.os == 'Windows'
