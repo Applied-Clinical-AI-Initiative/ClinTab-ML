@@ -1,0 +1,2 @@
+-r ../../requirements.txt
+python-docx>=1.1

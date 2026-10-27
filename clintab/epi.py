@@ -34,28 +34,30 @@ def two_by_two(a, b, c, d, conf=0.95):
     Adds Haldane-Anscombe 0.5 correction if any cell is zero."""
     a, b, c, d = float(a), float(b), float(c), float(d)
     cells = [a, b, c, d]
+    if not all(np.isfinite(cells)) or min(cells) < 0:
+        raise ValueError("2x2 table counts must be finite and not negative.")
     corrected = False
     if 0 in cells:
         a, b, c, d = a + 0.5, b + 0.5, c + 0.5, d + 0.5
         corrected = True
 
-    # Odds ratio
+    # odds ratio
     orr = (a * d) / (b * c)
     se_log_or = np.sqrt(1 / a + 1 / b + 1 / c + 1 / d)
     or_lo, or_hi = _z_ci(np.log(orr), se_log_or, conf)
 
-    # Risk ratio
+    # risk ratio
     risk_exp = a / (a + b)
     risk_unexp = c / (c + d)
     rr = risk_exp / risk_unexp
     se_log_rr = np.sqrt((1 / a) - 1 / (a + b) + (1 / c) - 1 / (c + d))
     rr_lo, rr_hi = _z_ci(np.log(rr), se_log_rr, conf)
 
-    # chi-square test on the (corrected) table
+    # chi-square test on the (corected) table
     table = np.array([[a, b], [c, d]])
     chi2, p, _, _ = stats.chi2_contingency(table, correction=True)
 
-    # Absolute risk difference, NNT/NNH
+    # absolute risk difference, nnt/nnh
     ard = risk_exp - risk_unexp
     nnt_raw = 1 / ard if ard != 0 else float("inf")
     return {
@@ -76,27 +78,30 @@ def two_by_two(a, b, c, d, conf=0.95):
 def nnt_nnh(a, b, c, d):
     """Explicit NNT / NNH breakdown from a 2x2 table."""
     res = two_by_two(a, b, c, d)
+    # work from the unrounded risk difference, 1 / (rounded ard) drifts
+    t = res["table"]
+    ard_exact = t["a"] / (t["a"] + t["b"]) - t["c"] / (t["c"] + t["d"])
     ard = res["abs_risk_diff"]
     out = {"abs_risk_diff": ard, "risk_exposed": res["risk_exposed"],
            "risk_unexposed": res["risk_unexposed"]}
-    if ard == 0:
+    if abs(ard_exact) < 1e-12:
         out["interpretation"] = "No difference in risk."
         out["value"] = None
-    elif ard < 0:
+    elif ard_exact < 0:
         out["measure"] = "NNT"
-        out["value"] = round(abs(1 / ard), 2)
+        out["value"] = round(abs(1 / ard_exact), 2)
         out["interpretation"] = (f"Treat {out['value']} patients to prevent one "
                                  "additional event (number needed to treat).")
     else:
         out["measure"] = "NNH"
-        out["value"] = round(abs(1 / ard), 2)
+        out["value"] = round(abs(1 / ard_exact), 2)
         out["interpretation"] = (f"For every {out['value']} patients exposed, one "
                                  "additional event occurs (number needed to harm).")
     return out
 
 
 # ---------------------------------------------------------------------------
-# Survival analysis
+# survival analysis
 # ---------------------------------------------------------------------------
 def kaplan_meier(df, time_col, event_col, group_col=None):
     """KM survival. If group_col given, returns one curve per group + log-rank."""
@@ -184,7 +189,7 @@ def cox_ph(df, time_col, event_col, covariates):
 
 
 # ---------------------------------------------------------------------------
-# Hosmer-Lemeshow goodness of fit
+# hosmer-lemeshow goodness of fit
 # ---------------------------------------------------------------------------
 def hosmer_lemeshow(y_true, y_prob, g=10):
     """Hosmer-Lemeshow C-statistic + per-decile observed/expected for calibration."""
@@ -193,7 +198,7 @@ def hosmer_lemeshow(y_true, y_prob, g=10):
     order = np.argsort(y_prob)
     y_true, y_prob = y_true[order], y_prob[order]
 
-    # split into g groups of (approximately) equal size
+    # split into g groups of (aproximately) equal size
     groups = np.array_split(np.arange(len(y_prob)), g)
     hl_stat, deciles = 0.0, []
     for grp in groups:

@@ -7,7 +7,7 @@ dependency and can be imported directly, as `clintab_cli.py` does).
 ## HTTP API
 
 All endpoints are under `/api` (see `routes.py`). Requests/responses are
-JSON unless noted. Most endpoints require an active upload session — call
+JSON unless noted. Most endpoints require an active upload session, so call
 `/api/upload` first, which sets a session cookie.
 
 ### Data upload & session
@@ -16,26 +16,30 @@ JSON unless noted. Most endpoints require an active upload session — call
 |--------|----------|------|---------|
 | POST | `/api/upload` | multipart `file` (CSV) | `session_id`, detected `columns`, row/col counts, a 20-row `preview` |
 | POST | `/api/confirm` | `types`, `missing`, `ratios`, `method`, `stratify_col`, `smote`, `seed` | split sizes (`n_train`/`n_val`/`n_test`), SMOTE hint |
-| GET | `/api/summary` | — | descriptive-statistics payload (continuous/categorical tables + summary card) |
-| GET | `/api/session` | — | current session metadata, or `{"active": false}` |
+| GET | `/api/summary` | none | descriptive-statistics payload (continuous/categorical tables + summary card) |
+| GET | `/api/session` | none | current session metadata, or `{"active": false}` |
+| GET | `/api/sessions` | none | every dataset on this machine, and which one is active |
+| POST · DELETE | `/api/sessions/<id>/activate` · `/api/sessions/<id>` · `/api/sessions` | none | switch to a dataset, delete one, or delete all |
 
 ### Model training
 
 | Method | Endpoint | Body | Returns |
 |--------|----------|------|---------|
-| GET | `/api/train/columns` | — | outcome candidates, columns, default hyperparameter grids per model |
-| POST | `/api/train` | `outcome`, `exclude`, `confounders`, `models`, `grids`, `scoring`, `grid_search`, `smote`, `threshold` | stores the config; training itself runs on the stream below |
-| GET | `/api/train/stream` | — | `text/event-stream` (SSE) — `start` → `progress`/`model_done`/`model_error` per model → `complete` |
+| GET | `/api/train/columns` | none | outcome candidates, columns, default hyperparameter grids per model |
+| POST | `/api/train/upload-split` | multipart `train_file`, `val_file` | replaces the train/validation partitions with your own CSVs and re-detects column types |
+| POST | `/api/train` | `outcome`, `exclude`, `confounders`, `models`, `grids`, `scoring`, `grid_search`, `cv_folds`, `smote`, `threshold` | stores the config; training itself runs on the stream below |
+| GET | `/api/train/stream` | none | `text/event-stream` (SSE): `start` → `progress`/`model_done`/`model_error` per model → `complete` |
 
 ### Model testing & prediction
 
 | Method | Endpoint | Body | Returns |
 |--------|----------|------|---------|
-| GET | `/api/models` | — | list of saved models + their metadata |
+| GET | `/api/models` | none | list of saved models + their metadata |
+| DELETE | `/api/models/<name>` | none | deletes a saved model |
 | POST | `/api/model/upload` | multipart `file` (`.pkl`) | registers an externally-trained pipeline |
 | GET | `/api/model/features` | `?name=` | feature list, outcome, task, classes for a saved model |
 | POST | `/api/test` | `models` (names), `source` (`test`/`upload`), `threshold` | metrics + plot coordinates per model, ROC/PR overlay PNGs |
-| POST | `/api/predict-single` | `model`, `row` (JSON) — or `model_file`/`json_file` uploads | prediction, probability (binary), plain-language explanation |
+| POST | `/api/predict-single` | `model`, `row` (JSON), or `model_file`/`json_file` uploads | prediction, probability (binary), plain-language explanation |
 
 ### Spline & clinical epi
 
@@ -48,6 +52,17 @@ JSON unless noted. Most endpoints require an active upload session — call
 | POST | `/api/epi/cox` | `time`, `event`, `covariates` | hazard ratios + CIs per covariate |
 | POST | `/api/epi/hl` | `model` (saved name) | Hosmer-Lemeshow statistic, calibration deciles, PNG |
 
+### Reports
+
+| Method | Endpoint | Body | Returns |
+|--------|----------|------|---------|
+| GET | `/api/report/methods` | none | `{text}`, a methods paragraph built from the session's analysis log |
+| GET | `/api/report/tripod` | none | TRIPOD+AI coverage: `{disclaimer, items, summary}` |
+
+### Errors
+
+Every `/api` error is JSON, `{"error": "..."}`, with a matching status code.
+
 ### Export
 
 | Method | Endpoint | Body | Returns |
@@ -56,7 +71,7 @@ JSON unless noted. Most endpoints require an active upload session — call
 
 ## Python library (`clintab/`)
 
-Every module here is pure — pandas/numpy/sklearn in, plain dicts/DataFrames
+Every module here is pure: pandas/numpy/sklearn in, plain dicts/DataFrames
 out, no Flask. `routes.py` and `clintab_cli.py` both call straight into
 these.
 
@@ -66,7 +81,7 @@ these.
 |----------|-------|---------|
 | `detect_column_types(df)` | a DataFrame | list of `{name, type, n_unique, pct_missing, high_missing, numeric, sample}` per column |
 | `summarize(df, coltypes)` | a DataFrame + `{col: type}` | `{card, continuous, categorical}` summary payload |
-| `apply_missing_handling(df, decisions)` | a DataFrame + `{col: 'include'\|'zero'\|'remove'}` | the cleaned DataFrame |
+| `apply_missing_handling(df, decisions)` | a DataFrame + `{col: 'include'\|'zero'\|'impute'\|'remove'}` | the cleaned DataFrame |
 | `minority_fraction(series)` | a pandas Series | smallest class proportion, or `None` |
 
 ### `clintab.ml`
@@ -76,8 +91,8 @@ these.
 | `determine_task(series)` | outcome column | `"binary"`, `"multiclass"`, or `"continuous"` |
 | `model_catalogue(task)` | task string | dict of model name → `{model, params}` (15 models total) |
 | `train_one_model(name, df_train, df_val, outcome, feat_cols, task, ...)` | training/validation frames + config | `(fitted_pipeline, info_dict)` |
-| `evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5)` | a fitted pipeline + a DataFrame | `(metrics_dict, plot_coords_dict)` |
-| `feature_importance(pipe, df_val, outcome, feat_cols, task)` | a fitted pipeline | DataFrame of `feature`/`importance`, sorted descending |
+| `evaluate(pipe, df, outcome, feat_cols, task, threshold=0.5, classes=None)` | a fitted pipeline + a DataFrame (`classes`: the `info["classes"]` the model was trained with) | `(metrics_dict, plot_coords_dict)` |
+| `feature_importance(pipe, df_val, outcome, feat_cols, task, classes=None)` | a fitted pipeline | DataFrame of `feature`/`importance`, sorted descending |
 | `predict_single(pipe, row_dict, feat_cols, task, classes=None)` | a fitted pipeline + one row as a dict | prediction, probability (binary), explanation string |
 
 ### `clintab.epi`
@@ -98,7 +113,7 @@ these.
 
 ### `clintab.plots`
 
-Matplotlib rendering only — one function per chart type (`roc_overlay`,
+Matplotlib rendering only, with one function per chart type (`roc_overlay`,
 `pr_overlay`, `confusion_plot`, `calibration_plot`, `residual_plot`,
 `pred_vs_actual_plot`, `importance_plot`, `spline_plot`, `km_plot`,
 `calibration_hl_plot`), each returning a `matplotlib.figure.Figure`.

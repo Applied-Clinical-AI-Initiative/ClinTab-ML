@@ -16,6 +16,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: No patient data in the repository
+        # the nsqip data use agreement forbids sharing the data, and we don't
+        # publish results derived from it either. the only csv allowed is the
+        # synthetic sample. this also catches files added with git add -f.
+        run: |
+          bad=$(git ls-files | grep -iE '\.(csv|tsv|xlsx?|sav|dta|sas7bdat|xpt|parquet|feather|rds|rdata)$|puf|nsqip|thktha|^paper/analysis/results/' | grep -v '^Data/sample_clinical\.csv$' || true)
+          if [ -n "$bad" ]; then echo "these files must not be committed:"; echo "$bad"; exit 1; fi
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:

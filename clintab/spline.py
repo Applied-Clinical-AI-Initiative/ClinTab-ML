@@ -10,7 +10,7 @@ import patsy
 import statsmodels.api as sm
 
 
-# Harrell's recommended knot quantiles by number of knots.
+# harrell's recommended knot quantiles by number of knots.
 _KNOT_QUANTILES = {
     3: [0.10, 0.50, 0.90],
     4: [0.05, 0.35, 0.65, 0.95],
@@ -47,12 +47,15 @@ def fit_rcs(df, predictor, outcome, n_knots=4):
     x = data[predictor].values
     knots = list(np.quantile(x, _KNOT_QUANTILES[n_knots]))
     knots = sorted(set(round(float(k), 6) for k in knots))
+    n_knots = len(knots)            # ties in the predictor can collapse knots
 
-    # patsy natural cubic spline (restricted) basis at the chosen knots
+    # patsy natural cubic spline (restricted) basis at the chosen knots. the
+    # plain cr() basis already spans the intercept, so it's centred here to
+    # keep the design full rank (same curve, identifiable coefficients).
     knot_str = ", ".join(str(k) for k in knots)
-    formula = f"cr(x, knots=[{knot_str}])"
+    formula = f"cr(x, knots=[{knot_str}], constraints='center')"
     basis = patsy.dmatrix(formula, {"x": x}, return_type="dataframe")
-    design = sm.add_constant(basis, has_constant="add")
+    design = basis
 
     model = sm.GLM(data["_y"].values, design, family=sm.families.Binomial())
     res = model.fit()
@@ -60,12 +63,12 @@ def fit_rcs(df, predictor, outcome, n_knots=4):
     # predict the log-odds curve over a dense grid
     grid = np.linspace(np.min(x), np.max(x), 200)
     gbasis = patsy.build_design_matrices([basis.design_info], {"x": grid})[0]
-    gdesign = sm.add_constant(np.asarray(gbasis), has_constant="add")
-    pred = res.get_prediction(gdesign)
-    mean = pred.predicted_mean
-    # linear predictor CI: GLM predicted_mean is on the link (log-odds) scale
-    ci = pred.conf_int()
-    lower, upper = ci[:, 0], ci[:, 1]
+    gdesign = np.asarray(gbasis)
+    # linear predictor (log-odds) and its 95% band. get_prediction() defaults
+    # to the response (probability) scale, so do this one by hand.
+    mean = gdesign @ np.asarray(res.params)
+    se = np.sqrt(np.einsum("ij,jk,ik->i", gdesign, np.asarray(res.cov_params()), gdesign))
+    lower, upper = mean - 1.959963984540054 * se, mean + 1.959963984540054 * se
 
     return {
         "predictor": predictor,

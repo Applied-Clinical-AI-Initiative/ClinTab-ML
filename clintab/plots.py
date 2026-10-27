@@ -1,10 +1,7 @@
 """plots.py
 Server-side matplotlib rendering. Returns base64 PNGs for inline <img> display
-and can write PNG/PDF files for download. No SVG / canvas / client charting --
+and can write PNG/PDF files for download. No SVG / canvas / client charting,
 all figures are produced here in Python (matplotlib 'Agg' backend).
-
-(Not in the original file list, but pulled out of routes.py to keep HTTP and
-drawing code separate -- noted in the README.)
 """
 import base64
 import io
@@ -37,7 +34,7 @@ def fig_to_pdf_bytes(fig):
 
 
 # ---------------------------------------------------------------------------
-# Curves that can overlay several models
+# curves that can overlay several models
 # ---------------------------------------------------------------------------
 def roc_overlay(series, title="ROC Curve"):
     """series: list of {name, fpr, tpr, auc}."""
@@ -54,7 +51,7 @@ def roc_overlay(series, title="ROC Curve"):
     return fig
 
 
-def pr_overlay(series, title="Precision–Recall Curve"):
+def pr_overlay(series, title="Precision-Recall Curve"):
     fig, ax = plt.subplots(figsize=(5.5, 5))
     for s in series:
         ax.plot(s["recall"], s["precision"], lw=2,
@@ -155,7 +152,7 @@ def spline_plot(x, logodds, lower, upper, knots, predictor="x",
     return fig
 
 
-def km_plot(curves, title="Kaplan–Meier"):
+def km_plot(curves, title="Kaplan-Meier"):
     """curves: list of {name, timeline, survival, lower, upper}."""
     fig, ax = plt.subplots(figsize=(6, 4.5))
     for c in curves:
@@ -171,7 +168,7 @@ def km_plot(curves, title="Kaplan–Meier"):
     return fig
 
 
-def calibration_hl_plot(prob_pred, obs, expected=None, title="Calibration (Hosmer–Lemeshow)"):
+def calibration_hl_plot(prob_pred, obs, expected=None, title="Calibration (Hosmer-Lemeshow)"):
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.plot([0, 1], [0, 1], "k--", lw=1, alpha=0.6, label="Perfect")
     ax.plot(prob_pred, obs, "o-", lw=2, label="Observed")

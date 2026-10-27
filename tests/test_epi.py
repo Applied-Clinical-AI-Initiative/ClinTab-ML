@@ -24,7 +24,7 @@ def test_two_by_two_applies_haldane_anscombe_correction_on_zero_cell():
 
 
 def test_nnt_nnh_benefit_case():
-    # exposed group has LOWER risk than unexposed -> NNT (benefit)
+    # exposed group has lower risk than unexposed -> nnt (benefit)
     out = epi.nnt_nnh(10, 90, 20, 80)
     assert out["measure"] == "NNT"
     assert out["value"] == pytest.approx(10.0)
@@ -77,3 +77,18 @@ def test_cox_ph_returns_hazard_ratio_rows():
     assert res["n"] == n
     assert res["rows"][0]["covariate"] == "age"
     assert "hazard_ratio" in res["rows"][0]
+
+
+def test_nnt_nnh_uses_the_unrounded_risk_difference():
+    # ard = 20/153 - 10/97 = 0.0276..., 1 / round(ard, 4) would give 36.2
+    out = epi.nnt_nnh(20, 133, 10, 87)
+    exact = 1 / abs(20 / 153 - 10 / 97)
+    assert out["value"] == pytest.approx(exact, abs=0.01)
+    assert out["value"] == epi.two_by_two(20, 133, 10, 87)["nnt"]
+
+
+def test_two_by_two_rejects_negative_and_non_finite_counts():
+    with pytest.raises(ValueError):
+        epi.two_by_two(-1, 2, 3, 4)
+    with pytest.raises(ValueError):
+        epi.two_by_two(float("nan"), 2, 3, 4)

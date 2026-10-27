@@ -7,13 +7,29 @@ authors:
     family-names: Ravindran
     affiliation: University of Toronto
     orcid: "https://orcid.org/0009-0002-5544-9895"
-  - given-names: Aazad
-    family-names: Abbas
-    affiliation: University of Toronto
-    orcid: "https://orcid.org/0000-0001-7414-1701"
   - given-names: Kisaan
     family-names: Ravindran
     affiliation: Applied Clinical AI Initiative
     orcid: "https://orcid.org/0009-0005-2716-5408"
+  - given-names: Aazad
+    family-names: Abbas
+    affiliation: University of Toronto
+    orcid: "https://orcid.org/0000-0001-7414-1701"
+abstract: >-
+  ClinTAB-ML is a local web application for developing and evaluating clinical
+  prediction models on tabular registry data. It covers data profiling, model
+  training with leakage-free validation, calibration, restricted cubic splines,
+  survival analysis and the usual epidemiological calculators, and it builds a
+  methods paragraph and a TRIPOD+AI coverage report from a log of the analysis.
+  All processing stays on the researcher's computer.
+keywords:
+  - clinical prediction models
+  - machine learning
+  - registry data
+  - TRIPOD+AI
+  - reproducibility
+  - epidemiology
+version: 1.0.0
+date-released: 2026-10-26
 repository-code: "https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML"
 license: MIT

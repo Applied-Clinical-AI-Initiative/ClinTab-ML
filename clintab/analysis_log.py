@@ -2,16 +2,16 @@
 Append-only record of every analysis action taken in a session: each model
 trained, each spline fit, each epi calculation, with its inputs, key
 outputs, and a timestamp. meta.json (see store.py) tracks current session
-state -- column types, split config -- but overwrites itself as things
+state, column types, split config, but overwrites itself as things
 change. This is the complement: a running history that nothing rewrites, so
 it's the single source of truth for reconstructing what actually happened in
 a session, for reproducibility and reporting.
 
-Pure Python, no Flask -- routes.py calls log_action() after a real action
+Pure Python, no Flask, routes.py calls log_action() after a real action
 happens; nothing here knows about HTTP.
 
 Stored as JSON Lines (one JSON object per line) at
-runtime/sessions/<session_id>/analysis_log.jsonl -- appending is just
+runtime/sessions/<session_id>/analysis_log.jsonl, appending is just
 writing one more line, so entries already logged are never rewritten.
 """
 import json
@@ -56,6 +56,10 @@ def read_log(session_id):
     with open(p) as f:
         for line in f:
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            try:
                 entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue            # half-written last line, e.g. after a crash
     return entries

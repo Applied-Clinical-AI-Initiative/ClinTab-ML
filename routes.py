@@ -7,7 +7,8 @@ logic lives here.
 import io
 import json
 import math
-import re
+import os
+import shutil
 
 import joblib
 import numpy as np
@@ -16,7 +17,9 @@ from flask import (
     Blueprint, request, jsonify, session, Response, send_file,
     send_from_directory, current_app,
 )
+from sklearn.model_selection import train_test_split
 
+import clintab
 from clintab import store
 from clintab import stats
 from clintab import ml
@@ -36,14 +39,15 @@ bp = Blueprint("api", __name__)
 def current_sid():
     return session.get("sid")
 
+
 def require_session():
     sid = current_sid()
     if not store.session_exists(sid):
         return None
     return sid
 
-def _safe(name):
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name))[:60]
+
+_safe = store.safe_name
 
 
 def _sanitize(o):
@@ -75,15 +79,20 @@ def index():
     return send_from_directory(current_app.static_folder, "index.html")
 
 
+@bp.route("/api/version")
+def version():
+    return jsonify({"app": "ClinTAB-ML", "version": clintab.__version__})
+
+
 # ===========================================================================
-# 1. DATA UPLOAD
+# 1. data upload
 # ===========================================================================
 @bp.route("/api/upload", methods=["POST"])
 def upload():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded."}), 400
     f = request.files["file"]
-    if not f.filename.lower().endswith(".csv"):
+    if not (f.filename or "").lower().endswith(".csv"):
         return jsonify({"error": "Please upload a CSV file."}), 400
 
     sid = store.new_session_id()
@@ -94,7 +103,11 @@ def upload():
     try:
         df = pd.read_csv(raw_path)
     except Exception as e:
+        shutil.rmtree(store.session_dir(sid), ignore_errors=True)   # dont leave a half session behind
         return jsonify({"error": f"Could not parse CSV: {e}"}), 400
+    if df.empty:
+        shutil.rmtree(store.session_dir(sid), ignore_errors=True)
+        return jsonify({"error": "The CSV has no data rows."}), 400
 
     cols = stats.detect_column_types(df)
     meta = {
@@ -129,12 +142,19 @@ def confirm():
     body = request.get_json(force=True)
 
     coltypes = body.get("types", {})          # {col: binary|categorical|continuous|date|exclude}
-    missing = body.get("missing", {})         # {col: include|zero|remove}
+    missing = body.get("missing", {})         # {col: include|zero|impute|remove}
     ratios = body.get("ratios", [0.70, 0.15, 0.15])
     method = body.get("method", "random")      # random | stratified
     stratify_col = body.get("stratify_col") or None
     smote_pref = bool(body.get("smote", False))
-    seed = int(body.get("seed", 42))
+    try:
+        seed = int(body.get("seed", 42))
+        r = [float(x) for x in ratios]
+    except (TypeError, ValueError):
+        return jsonify({"error": "Split ratios and seed must be numbers."}), 400
+    if len(r) != 3 or min(r) <= 0:
+        return jsonify({"error": "Train, validation and test shares must all be above zero."}), 400
+    r = [x / sum(r) for x in r]
 
     df = pd.read_csv(store.session_path(sid, "raw.csv"))
 
@@ -145,14 +165,11 @@ def confirm():
     kept_types = {c: t for c, t in coltypes.items()
                   if t != "exclude" and c in df.columns}
 
-    # save cleaned full dataset
-    df.to_csv(store.session_path(sid, "full.csv"), index=False)
+    if method == "stratified" and stratify_col not in df.columns:
+        return jsonify({"error": "Choose a column to stratify by (it can't be excluded or removed)."}), 400
 
     # split -------------------------------------------------------------
-    r = [float(x) for x in ratios]
-    r = [x / sum(r) for x in r]
-    from sklearn.model_selection import train_test_split
-    strat = df[stratify_col] if (method == "stratified" and stratify_col in df.columns) else None
+    strat = df[stratify_col] if method == "stratified" else None
     try:
         train, temp = train_test_split(df, test_size=(r[1] + r[2]),
                                        random_state=seed, stratify=strat)
@@ -162,15 +179,22 @@ def confirm():
                                      random_state=seed, stratify=strat2)
     except ValueError:
         # stratification can fail on tiny/rare classes -> fall back to random
-        train, temp = train_test_split(df, test_size=(r[1] + r[2]), random_state=seed)
-        val, test = train_test_split(temp, test_size=(r[2] / (r[1] + r[2])),
-                                     random_state=seed)
-        method = "random (stratify fell back)"
+        try:
+            train, temp = train_test_split(df, test_size=(r[1] + r[2]), random_state=seed)
+            val, test = train_test_split(temp, test_size=(r[2] / (r[1] + r[2])),
+                                         random_state=seed)
+        except ValueError:
+            return jsonify({"error": "Not enough rows to make three non-empty partitions."}), 400
+        if method == "stratified":
+            method = "random (stratify fell back)"
+
+    # save cleaned full dataset + partitions
+    df.to_csv(store.session_path(sid, "full.csv"), index=False)
 
     for name, part in [("train", train), ("val", val), ("test", test)]:
         part.to_csv(store.session_path(sid, f"{name}.csv"), index=False)
 
-    # SMOTE applicability hint
+    # smote applicability hint
     smote_hint = None
     if stratify_col and stratify_col in df.columns:
         frac = stats.minority_fraction(df[stratify_col])
@@ -200,7 +224,7 @@ def confirm():
 
 
 # ===========================================================================
-# 2. DATA SUMMARY
+# 2. data summary
 # ===========================================================================
 @bp.route("/api/summary")
 def summary():
@@ -256,7 +280,7 @@ def clear_all_sessions():
 
 
 # ===========================================================================
-# 3. MODEL TRAINING
+# 3. model training
 # ===========================================================================
 @bp.route("/api/train/columns")
 def train_columns():
@@ -265,8 +289,13 @@ def train_columns():
         return jsonify({"error": "No active session."}), 400
     meta = store.load_meta(sid)
     coltypes = meta.get("coltypes", {})
-    outcomes = [{"name": c, "type": t} for c, t in coltypes.items()
-                if t in ("binary", "categorical", "continuous")]
+    names = [c for c, t in coltypes.items() if t in ("binary", "categorical", "continuous")]
+    # the same rule /api/train applies, so the page and the server agree
+    tasks = {}
+    if names:
+        head = pd.read_csv(store.session_path(sid, "train.csv"), usecols=names)
+        tasks = {c: ml.determine_task(head[c]) for c in names}
+    outcomes = [{"name": c, "type": coltypes[c], "task": tasks.get(c)} for c in names]
     return jsonify({
         "outcomes": outcomes,
         "columns": [{"name": c, "type": t} for c, t in coltypes.items()],
@@ -304,7 +333,7 @@ def train_upload_split():
     val_df.to_csv(store.session_path(sid, "val.csv"), index=False)
 
     # re-detect column types from the uploaded data so outcome selection and
-    # coltype-aware preprocessing downstream stay consistent with what's
+    # coltype-aware preprocessing downstream stay consitent with what's
     # actually in these files
     combined = pd.concat([train_df, val_df], axis=0, ignore_index=True)
     cols = stats.detect_column_types(combined)
@@ -336,12 +365,25 @@ def train_config():
     body = request.get_json(force=True)
     meta = store.load_meta(sid)
 
-    outcome = body["outcome"]
-    # Read the whole outcome column, not a head sample: task detection counts
+    outcome = body.get("outcome")
+    train_cols = list(pd.read_csv(store.session_path(sid, "train.csv"), nrows=0).columns)
+    if outcome not in train_cols:
+        return jsonify({"error": f"Outcome column {outcome!r} is not in the training data."}), 400
+    # read teh whole outcome column, not a head sample: task detection counts
     # distinct values, and a few hundred rows can show <=10 for a continuous
-    # outcome (e.g. length of stay), misclassifying it as multiclass.
-    outcome_col = pd.read_csv(store.session_path(sid, "train.csv"), usecols=[outcome])[outcome]
-    task = ml.determine_task(outcome_col)
+    # outcome (e.g. length of stay) or miss a rare class completely.
+    task = ml.determine_task(pd.read_csv(store.session_path(sid, "train.csv"),
+                                         usecols=[outcome])[outcome])
+    unknown = [m for m in body.get("models", []) if m not in ml.model_catalogue(task)]
+    if unknown:
+        return jsonify({"error": f"Unknown model(s) for a {task} outcome: {unknown}"}), 400
+    try:
+        cv_folds = int(body["cv_folds"]) if body.get("cv_folds") else None
+        threshold = float(body.get("threshold", 0.5))
+    except (TypeError, ValueError):
+        return jsonify({"error": "cv_folds must be a whole number and threshold a number."}), 400
+    if cv_folds is not None and cv_folds < 2:
+        return jsonify({"error": "cv_folds must be at least 2."}), 400
 
     cfg = {
         "outcome": outcome,
@@ -353,11 +395,11 @@ def train_config():
         "scoring": body.get("scoring", "roc"),
         "grid_search": bool(body.get("grid_search", True)),
         "smote": bool(body.get("smote", meta.get("smote_pref", False))),
-        "threshold": float(body.get("threshold", 0.5)),
-        # k-fold CV on the training set for grid search, instead of the
-        # single validation-set split -- helps on small datasets. Leave unset
-        # (None) to keep the default validation-set-only behavior.
-        "cv_folds": int(body["cv_folds"]) if body.get("cv_folds") else None,
+        "threshold": threshold,
+        # k-fold cv on the training set for grid search, instead of the
+        # single validation set split, helps on small datasets. none keeps
+        # the default (validation set only).
+        "cv_folds": cv_folds,
     }
     meta["train_config"] = cfg
     store.save_meta(sid, meta)
@@ -379,12 +421,15 @@ def train_stream():
 
     outcome = cfg["outcome"]
     task = cfg["task"]
-    exclude = list(cfg["exclude"])
+    confounders = list(cfg.get("confounders", []))
+    # confounders are forced in, so they can't also be excluded
+    exclude = [c for c in cfg["exclude"] if c not in confounders]
     # date columns should never be features
     for c, t in meta.get("coltypes", {}).items():
         if t == "date" and c not in exclude:
             exclude.append(c)
     feat_cols = ml.feature_columns(df_train, outcome, exclude)
+    confounders = [c for c in confounders if c in feat_cols]
 
     def sse(obj):
         return f"data: {json.dumps(_sanitize(obj))}\n\n"
@@ -408,12 +453,14 @@ def train_stream():
                     coltypes=meta.get("coltypes", {}), cv_folds=cfg["cv_folds"])
 
                 vmetrics, vcoords = ml.evaluate(pipe, df_val, outcome, feat_cols,
-                                                task, threshold=cfg["threshold"])
+                                                task, threshold=cfg["threshold"],
+                                                classes=info.get("classes"))
 
-                # feature importance -> CSV + PNG
-                imp = ml.feature_importance(pipe, df_val, outcome, feat_cols, task)
+                # feature importance -> csv + png
+                imp = ml.feature_importance(pipe, df_val, outcome, feat_cols, task,
+                                            classes=info.get("classes"))
                 ts = store.timestamp()
-                base = _safe(f"{name}_{outcome}_{ts}")
+                base = store.model_base_name(name, outcome, ts)
                 joblib.dump({"pipe": pipe, "feat_cols": feat_cols, "outcome": outcome,
                              "task": task, "classes": info.get("classes"),
                              "threshold": cfg["threshold"]},
@@ -422,13 +469,14 @@ def train_stream():
                     "model": name, "outcome": outcome, "task": task,
                     "scoring": cfg["scoring"], "smote": info["smote"],
                     "best_params": info["best_params"], "classes": info.get("classes"),
-                    "features": feat_cols, "val_metrics": vmetrics,
+                    "features": feat_cols, "confounders": confounders,
+                    "val_metrics": vmetrics,
                     "threshold": cfg["threshold"], "created": ts,
                     "session": sid,
                 }
                 with open(store.model_meta_path(base), "w") as fh:
                     json.dump(store_meta, fh, indent=2, default=str)
-                imp.to_csv(store.EXPORTS + f"/{base}_importance.csv", index=False)
+                imp.to_csv(os.path.join(store.EXPORTS, f"{base}_importance.csv"), index=False)
 
                 imp_png = plots.fig_to_png(plots.importance_plot(
                     imp["feature"], imp["importance"], f"{name}: feature importance"))
@@ -438,7 +486,9 @@ def train_stream():
                                         inputs={"model": name, "outcome": outcome,
                                                 "scoring": cfg["scoring"],
                                                 "smote": info["smote"],
-                                                "cv_folds": info["cv_folds"]},
+                                                "tuned": info["tuned"],
+                                                "cv_folds": info["cv_folds"],
+                                                "confounders": confounders},
                                         outputs={"saved_as": base, "metrics": vmetrics})
                 yield sse({"event": "model_done", "model": name,
                            "saved_as": base, "metrics": vmetrics,
@@ -456,7 +506,7 @@ def train_stream():
 
 
 # ===========================================================================
-# 4. MODEL TESTING
+# 4. model testing
 # ===========================================================================
 @bp.route("/api/models")
 def list_models():
@@ -468,14 +518,17 @@ def model_upload():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded."}), 400
     f = request.files["file"]
-    name = _safe(f.filename.rsplit(".", 1)[0]) + "_uploaded"
+    fname = f.filename or ""
+    if not fname.lower().endswith((".pkl", ".joblib")):
+        return jsonify({"error": "Please upload a .pkl (joblib) model file."}), 400
+    store.ensure_dirs()
+    name = _safe(fname.rsplit(".", 1)[0], max_len=80) + "_uploaded"
     f.save(store.model_path(name))
     return jsonify({"ok": True, "name": name})
 
 
 @bp.route("/api/models/<name>", methods=["DELETE"])
 def delete_model(name):
-    name = _safe(name)
     if not store.model_exists(name):
         return jsonify({"error": "Model not found."}), 404
     store.delete_model(name)
@@ -483,6 +536,10 @@ def delete_model(name):
 
 
 def _load_model(name):
+    """Load a saved model by name. Pickles run code when loaded, so this is
+    only for model files you trust (see the security note in the README)."""
+    if not store.model_exists(name):
+        raise FileNotFoundError(f"Model not found: {name}")
     obj = joblib.load(store.model_path(name))
     if not isinstance(obj, dict):       # raw pipeline pickle (user uploaded)
         return {"pipe": obj, "feat_cols": None, "outcome": None,
@@ -493,15 +550,25 @@ def _load_model(name):
 @bp.route("/api/test", methods=["POST"])
 def test_models():
     """Evaluate one or more saved models on the held-out test set (or a new CSV)."""
-    names = request.form.getlist("models") or (request.json or {}).get("models", [])
-    source = request.form.get("source") or (request.json or {}).get("source", "test")
-    threshold = float(request.form.get("threshold", 0.5)) if request.form else \
-        float((request.json or {}).get("threshold", 0.5))
+    body = request.get_json(silent=True) or {}
+    names = request.form.getlist("models") or body.get("models", [])
+    source = request.form.get("source") or body.get("source", "test")
+    try:
+        threshold = float(request.form.get("threshold") or body.get("threshold", 0.5))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Threshold must be a number."}), 400
+    if not names:
+        return jsonify({"error": "No models selected."}), 400
 
     # choose dataframe
     sid = None
-    if source == "upload" and "file" in request.files:
-        df = pd.read_csv(request.files["file"])
+    if source == "upload":
+        if "file" not in request.files:
+            return jsonify({"error": "Choose a CSV to test on."}), 400
+        try:
+            df = pd.read_csv(request.files["file"])
+        except Exception as e:
+            return jsonify({"error": f"Could not parse CSV: {e}"}), 400
     else:
         sid = require_session()
         if not sid:
@@ -511,7 +578,11 @@ def test_models():
     roc_series, pr_series = [], []
     out = {"models": [], "task": None}
     for name in names:
-        mdl = _load_model(name)
+        try:
+            mdl = _load_model(name)
+        except Exception as e:
+            out["models"].append({"name": name, "error": f"Could not load model: {e}"})
+            continue
         pipe, feat_cols = mdl["pipe"], mdl["feat_cols"]
         outcome, task = mdl["outcome"], mdl["task"]
         if outcome is None or outcome not in df.columns:
@@ -519,14 +590,23 @@ def test_models():
             continue
         if feat_cols is None:
             feat_cols = [c for c in df.columns if c != outcome]
+        absent = [c for c in feat_cols if c not in df.columns]
+        if absent:
+            out["models"].append({"name": name, "error": f"Missing feature column(s): {absent[:5]}"})
+            continue
         out["task"] = task
-        metrics, coords = ml.evaluate(pipe, df, outcome, feat_cols, task, threshold)
+        classes = mdl.get("classes")
+        try:
+            metrics, coords = ml.evaluate(pipe, df, outcome, feat_cols, task, threshold, classes)
+        except Exception as e:
+            out["models"].append({"name": name, "error": f"Could not evaluate: {e}"})
+            continue
         if sid:
             analysis_log.log_action(sid, "test_model", inputs={"model": name, "source": source},
                                     outputs={"metrics": metrics})
         entry = {"name": name, "metrics": metrics, "coords": coords}
         if task in ("binary", "continuous"):
-            corr = ml.feature_outcome_correlations(df, outcome, feat_cols, task)
+            corr = ml.feature_outcome_correlations(df, outcome, feat_cols, task, classes)
             entry["correlations"] = corr.head(20).to_dict(orient="records")
         if task == "binary":
             roc_series.append({"name": name, **coords["roc"]})
@@ -560,7 +640,10 @@ def test_models():
 def model_features():
     """Feature list for a saved model (for building a single-prediction form)."""
     name = request.args.get("name")
-    mdl = _load_model(name)
+    try:
+        mdl = _load_model(name)
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
     return jsonify({"name": name, "features": mdl["feat_cols"],
                     "outcome": mdl["outcome"], "task": mdl["task"],
                     "classes": mdl["classes"]})
@@ -569,26 +652,33 @@ def model_features():
 @bp.route("/api/predict-single", methods=["POST"])
 def predict_single():
     """Upload a JSON row (+ choose a model) -> single prediction with probability."""
-    if "model_file" in request.files and "json_file" in request.files:
-        pipe_obj = joblib.load(request.files["model_file"])
-        mdl = pipe_obj if isinstance(pipe_obj, dict) else {"pipe": pipe_obj,
-              "feat_cols": None, "task": "binary", "classes": None}
-        row = json.load(request.files["json_file"])
-    else:
-        body = request.get_json(force=True)
-        mdl = _load_model(body["model"])
-        row = body.get("row", {})
-        if isinstance(row, str):
-            row = json.loads(row)
+    try:
+        if "model_file" in request.files and "json_file" in request.files:
+            pipe_obj = joblib.load(request.files["model_file"])
+            mdl = pipe_obj if isinstance(pipe_obj, dict) else {"pipe": pipe_obj,
+                  "feat_cols": None, "task": "binary", "classes": None}
+            row = json.load(request.files["json_file"])
+        else:
+            body = request.get_json(force=True)
+            mdl = _load_model(body["model"])
+            row = body.get("row", {})
+            if isinstance(row, str):
+                row = json.loads(row)
+        if not isinstance(row, dict):
+            return jsonify({"error": "The row must be a JSON object of {feature: value}."}), 400
 
-    feat_cols = mdl["feat_cols"] or list(row.keys())
-    task = mdl["task"] or "binary"
-    result = ml.predict_single(mdl["pipe"], row, feat_cols, task, mdl.get("classes"))
+        feat_cols = mdl["feat_cols"] or list(row.keys())
+        task = mdl["task"] or "binary"
+        result = ml.predict_single(mdl["pipe"], row, feat_cols, task, mdl.get("classes"))
+    except FileNotFoundError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        return jsonify({"error": f"Could not predict: {e}"}), 400
     return jsonify(result)
 
 
 # ===========================================================================
-# 5. SPLINE
+# 5. spline
 # ===========================================================================
 @bp.route("/api/spline", methods=["POST"])
 def spline_fit():
@@ -614,18 +704,24 @@ def spline_fit():
 
 
 # ===========================================================================
-# 6. CLINICAL EPI
+# 6. clinical epi
 # ===========================================================================
 @bp.route("/api/epi/or", methods=["POST"])
 def epi_or():
     b = request.get_json(force=True)
-    return jsonify(epi.two_by_two(b["a"], b["b"], b["c"], b["d"]))
+    try:
+        return jsonify(epi.two_by_two(b["a"], b["b"], b["c"], b["d"]))
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({"error": f"Invalid 2x2 table: {e}"}), 400
 
 
 @bp.route("/api/epi/nnt", methods=["POST"])
 def epi_nnt():
     b = request.get_json(force=True)
-    return jsonify(epi.nnt_nnh(b["a"], b["b"], b["c"], b["d"]))
+    try:
+        return jsonify(epi.nnt_nnh(b["a"], b["b"], b["c"], b["d"]))
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({"error": f"Invalid 2x2 table: {e}"}), 400
 
 
 @bp.route("/api/epi/km", methods=["POST"])
@@ -677,12 +773,17 @@ def epi_hl():
         mdl = _load_model(b["model"])
     except Exception as e:
         return jsonify({"error": f"Could not load model: {e}"}), 400
-    if mdl["task"] != "binary":
-        return jsonify({"error": "Hosmer-Lemeshow needs a binary model."}), 400
+    if mdl["task"] != "binary" or not mdl["feat_cols"]:
+        return jsonify({"error": "Hosmer-Lemeshow needs a binary model trained in ClinTAB-ML."}), 400
     df = pd.read_csv(store.session_path(sid, "test.csv"))
-    y, _ = ml.encode_outcome(df[mdl["outcome"]], "binary")
+    if mdl["outcome"] not in df.columns:
+        return jsonify({"error": "Outcome column not found in the test set."}), 400
+    y, _ = ml.encode_outcome(df[mdl["outcome"]], "binary", mdl.get("classes"))
     mask = ~pd.isna(y)
-    scores = ml.predict_scores(mdl["pipe"], df[mdl["feat_cols"]][mask], "binary")
+    try:
+        scores = ml.predict_scores(mdl["pipe"], df[mdl["feat_cols"]][mask], "binary")
+    except Exception as e:
+        return jsonify({"error": f"Could not score the test set: {e}"}), 400
     res = epi.hosmer_lemeshow(np.asarray(y)[mask], scores)
     res["png"] = plots.fig_to_png(plots.calibration_hl_plot(
         res["mean_pred"], res["observed_rate"]))
@@ -693,7 +794,7 @@ def epi_hl():
 
 
 # ===========================================================================
-# 7. PDF export (any chart) -- "render this data as a downloadable PDF"
+# 7. pdf export (any chart), "render this data as a downloadable pdf"
 # ===========================================================================
 def _build_fig(kind, data):
     if kind == "roc":
@@ -723,7 +824,10 @@ def _build_fig(kind, data):
 @bp.route("/api/render/pdf", methods=["POST"])
 def render_pdf():
     b = request.get_json(force=True)
-    fig = _build_fig(b["kind"], b["data"])
+    try:
+        fig = _build_fig(b["kind"], b["data"])
+    except (KeyError, TypeError, ValueError) as e:
+        return jsonify({"error": f"Could not render that chart: {e}"}), 400
     pdf = plots.fig_to_pdf_bytes(fig)
     return send_file(io.BytesIO(pdf), mimetype="application/pdf",
                      as_attachment=True,
@@ -731,7 +835,7 @@ def render_pdf():
 
 
 # ===========================================================================
-# 8. Reports (methods text + TRIPOD+AI coverage), from the analysis log
+# 8. reports (methods text + tripod+ai coverage), from the analysis log
 # ===========================================================================
 @bp.route("/api/report/methods")
 def report_methods():

@@ -6,3 +6,5 @@ rendering (plots.py), and filesystem/session helpers (store.py).
 Flask (app.py / routes.py) and the CLI (clintab_cli.py) both import from
 here; nothing in this package depends on Flask.
 """
+
+__version__ = "1.0.0"

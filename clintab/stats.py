@@ -1,5 +1,5 @@
 """stats.py
-Data profiling + descriptive statistics. Pure pandas/numpy -- no Flask, no
+Data profiling + descriptive statistics. Pure pandas/numpy, no Flask, no
 sklearn. Two jobs:
 
   1. detect_column_types()  -> auto-classify each column as binary / categorical
@@ -14,11 +14,11 @@ import pandas as pd
 
 
 # ----------------------------------------------------------------------------
-# Column type detection
+# column type detection
 # ----------------------------------------------------------------------------
-# Heuristics (date / integer test) only need a sample. On large registries
+# heuristics (date / integer test) only need a sample. on large registries
 # parsing every full string column with dateutil is the upload bottleneck, so we
-# cap the work at SAMPLE_N non-null values per column. Exact counts that are
+# cap the work at sample_n non-null values per column. exact counts that are
 # cheap (missingness, nunique) are still computed on the full column.
 SAMPLE_N = 4000
 
@@ -29,7 +29,7 @@ def _looks_like_date(sample):
         return False
     if not (sample.dtype == object or str(sample.dtype).startswith("datetime")):
         return False
-    # cheap reject: values with no date-ish separators are almost never dates
+    # cheap reject: values with no date-ish seperators are almost never dates
     head = sample.astype(str).head(50)
     if not head.str.contains(r"[-/:]|\d{4}", regex=True).any():
         return False
@@ -50,7 +50,7 @@ def _is_integer_like(sample):
 
 
 def detect_column_types(df):
-    """Classify every column. Rules (from spec):
+    """Classify every column. Rules:
        - binary      : exactly 2 unique non-null values
        - categorical : strings, OR integer-like numeric with < 10 unique values
        - continuous  : numeric with > 10 unique values
@@ -102,7 +102,7 @@ def minority_fraction(series):
 
 
 # ----------------------------------------------------------------------------
-# Descriptive summary
+# descriptive summary
 # ----------------------------------------------------------------------------
 def _continuous_row(s):
     v = pd.to_numeric(s, errors="coerce").dropna()
@@ -115,7 +115,7 @@ def _continuous_row(s):
         "mean": round(float(v.mean()), 4),
         "median": round(float(v.median()), 4),
         "sd": round(float(v.std(ddof=1)), 4) if v.shape[0] > 1 else 0.0,
-        "iqr": f"{round(float(q1), 3)}–{round(float(q3), 3)}",
+        "iqr": f"{round(float(q1), 3)} to {round(float(q3), 3)}",
         "min": round(float(v.min()), 4),
         "max": round(float(v.max()), 4),
     }
@@ -162,7 +162,7 @@ def summarize(df, coltypes):
             })
         # date columns are skipped in the variable tables (used for the card only)
 
-    # Top card -------------------------------------------------------------
+    # top card -------------------------------------------------------------
     complete_cases = int(df.dropna().shape[0])
     pct_complete = round(100.0 * complete_cases / n_total, 2) if n_total else 0.0
 
@@ -197,7 +197,7 @@ def apply_missing_handling(df, decisions):
        'zero'    -> fill NaN with 0
        'include' -> leave as-is (rows may be dropped later by complete-case)
        'impute'  -> fill NaN with the column median (numeric) or most frequent
-                    value (categorical) -- simple/univariate imputation, matching
+                    value (categorical), simple/univariate imputation, matching
                     what ml.build_preprocessor already does at model-training time.
     Returns the cleaned DataFrame.
     """
@@ -213,7 +213,7 @@ def apply_missing_handling(df, decisions):
         elif d == "impute":
             if pd.api.types.is_numeric_dtype(df[c]):
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")  # all-NaN column -> benign "Mean of empty slice"
+                    warnings.simplefilter("ignore")  # all-nan column -> benign "mean of empty slice"
                     fill = df[c].median()
             else:
                 mode = df[c].mode(dropna=True)

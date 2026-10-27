@@ -46,8 +46,15 @@ def test_read_log_empty_session_returns_empty_list(session_id):
 
 def test_log_action_creates_session_dir_if_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(store, "SESSIONS", str(tmp_path))
-    # note: no store.session_dir(..., create=True) call first
+    # note: no store.session_dir() call with create first
     analysis_log.log_action("brand-new-session", "upload", inputs={"filename": "x.csv"})
     entries = analysis_log.read_log("brand-new-session")
     assert len(entries) == 1
     assert entries[0]["action"] == "upload"
+
+
+def test_read_log_skips_a_half_written_line(session_id):
+    analysis_log.log_action(session_id, "upload")
+    with open(analysis_log.log_path(session_id), "a") as f:
+        f.write('{"timestamp": 1, "action": "tra')       # crash mid-write
+    assert [e["action"] for e in analysis_log.read_log(session_id)] == ["upload"]
