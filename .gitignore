@@ -41,6 +41,8 @@ y1_test_predictions.csv
 /*.xlsx
 *.numbers
 ~$*
+# maintainer notes: release steps, audit, guides. local only.
+/internal-guides/
 RELEASE_AUDIT.md
 
 # ---------------------------------------------------------------------------
