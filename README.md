@@ -1,5 +1,7 @@
 # ClinTAB-ML
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23697356.svg)](https://doi.org/10.5281/zenodo.23697356)
+
 A single-page **clinical machine-learning web app** for tabular registry data
 (TQIP, NSQIP, and any CSV cohort). It is the nexus for an ML study: upload a
 CSV, profile it, train and compare models, test them with full diagnostic
@@ -55,10 +57,11 @@ You don't need Python or a terminal.
    and download the file for your computer:
    - **Windows:** `ClinTAB-ML-<version>-windows-setup.exe`. Run it and follow the steps.
      It installs for your account only, so it doesn't need admin rights.
-   - **Mac (Apple silicon):** `ClinTAB-ML-<version>-macos-arm64.dmg`. Open it and drag
-     ClinTAB-ML into Applications.
-2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. It opens
-   in your web browser, and a small ClinTAB-ML window appears. Keep that window open
+   - **Mac (Apple silicon, macOS 12 or later):** `ClinTAB-ML-<version>-macos-arm64.dmg`.
+     Open it and drag ClinTAB-ML into Applications.
+2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. A small
+   ClinTAB-ML window appears straight away and says when it's ready (the very first start
+   can take a minute), then ClinTAB-ML opens in your web browser. Keep that window open
    while you work and close it when you're done.
 3. To try it out, upload `sample_clinical.csv` from the
    [Data folder](Data/sample_clinical.csv) and follow the tabs from top to bottom.
@@ -339,8 +342,14 @@ answer is visible to future users with the same question.
 
 ## Citing
 
-If you use ClinTAB-ML, please cite it using `CITATION.cff` (GitHub's "Cite this
-repository" button reads it).
+If you use ClinTAB-ML, please cite the version you used. Every release is archived on
+Zenodo, and https://doi.org/10.5281/zenodo.23697356 always points to the newest one,
+with links to each version and its own DOI. For example:
+
+> Ravindran D, Ravindran K, Abbas A. ClinTAB-ML: a clinical machine-learning web app
+> for tabular registry data. Version 1.0.0. Zenodo; 2026. doi:10.5281/zenodo.23697358
+
+GitHub's "Cite this repository" button gives the same details from `CITATION.cff`.
 
 ---
 
