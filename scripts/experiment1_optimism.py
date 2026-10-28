@@ -5,7 +5,7 @@ each fit, records the reported metric and the same fitted model's metric on
 a separate held-out partition.
 
 Run entirely on your own machine against your own real_cohort.csv (output of
-build_nsqip_cohort.py). Only optimism_results.csv -- aggregate metric values,
+build_cohort.py). Only optimism_results.csv -- aggregate metric values,
 no patient-level rows -- is meant to leave your machine.
 
 Usage:

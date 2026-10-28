@@ -1,16 +1,16 @@
-"""check_puf_headers.py
+"""check_source_headers.py
 Reads ONLY the column names of your raw NSQIP files (never a data row) and
 reports which Y2 (complication) and Y4 (death timing) columns exist.
 
 Usage:
-    python scripts/check_puf_headers.py /path/tka.csv /path/tha.csv ...
+    python scripts/check_source_headers.py /path/tka.csv /path/tha.csv ...
 """
 import sys
 
 import pandas as pd
 
 sys.path.insert(0, __import__("os").path.dirname(__file__))
-from build_nsqip_cohort import DEATH_FIELDS, MORBIDITY_COMPONENTS  # noqa: E402
+from build_cohort import DEATH_FIELDS, MORBIDITY_COMPONENTS  # noqa: E402
 
 HINTS = ("DEATH", "DOD", "MORT", "DTH", "SSI", "INFEC", "DVT", "PULEMB", "PNEUM", "MI",
          "STROKE", "CVA", "ARREST", "SEPSIS", "SHOCK", "BLEED", "RENAL", "REINTUB", "COMP")

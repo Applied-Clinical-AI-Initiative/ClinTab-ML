@@ -1,4 +1,4 @@
-"""build_nsqip_cohort.py
+"""build_cohort.py
 Protocol Section 1: builds the arthroplasty cohort from local ACS NSQIP PUF
 extracts and writes a single clean CSV ready to feed into ClinTAB-ML.
 
@@ -18,7 +18,7 @@ DO NOT commit the raw files or the output CSV. Both are covered by your PUF
 data use agreement. Only this script belongs in the repository.
 
 Usage:
-    python scripts/build_nsqip_cohort.py \
+    python scripts/build_cohort.py \
         --tka /path/to/TKA.csv \
         --tha /path/to/THA.csv \
         --tka-rev /path/to/TKA_REV.csv \
@@ -240,7 +240,7 @@ def _derive_outcomes(df):
         df = df.drop(columns=[c for c in DEATH_FIELDS if c in df.columns])
     else:
         print("WARNING: no death-timing column was found -- Y4_time/Y4_event were NOT "
-              "created. Run check_puf_headers.py to find the right name, then pass it "
+              "created. Run check_source_headers.py to find the right name, then pass it "
               "with --death-field NAME.", file=sys.stderr)
 
     return df

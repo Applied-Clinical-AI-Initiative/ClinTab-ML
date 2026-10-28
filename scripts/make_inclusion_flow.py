@@ -1,6 +1,6 @@
 """make_inclusion_flow.py
 Draws the cohort inclusion flow figure (protocol Section 1.1 / Section 7)
-from the "Inclusion flow" aggregate-count output of build_nsqip_cohort.py.
+from the "Inclusion flow" aggregate-count output of build_cohort.py.
 Save that output to a text file and pass its path with --log.
 
 Usage:
