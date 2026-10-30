@@ -4,6 +4,73 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Methods guardrails, the statistics reviewers ask for, and teaching tools.
+Statistical outputs added here are tested against reference values from R (glm,
+pROC, survival, cmprsk, epitools, pmsampsize) and the dcurves package.
+
+### Fixed
+- Missing value fills chosen at Confirm were computed on the whole dataset
+  before the split. They are now learned on the training partition only and the
+  same values are applied to validation, test and the full cleaned dataset.
+- Columns with 30 to 50% missing defaulted to "fill with 0" (an NSQIP albumin
+  column would have become 0 g/dL for about 44% of patients). The default is now
+  training-fitted imputation up to 50% and removal above; zero fill is still
+  available for counts where missing means none.
+- The app recommended SMOTE whenever the minority class was under 30%. It now
+  reports the imbalance and explains that resampling usually worsens
+  calibration without improving discrimination (van den Goorbergh et al.,
+  JAMIA 2022); SMOTE stays opt-in.
+- TRIPOD+AI report: a random internal test split no longer counts as external
+  validation (new internal validation item), Hosmer-Lemeshow alone no longer
+  counts as calibration, sample size is only marked found when a calculation was
+  run, not resampling is no longer penalised, and the missing data item checks
+  whether the data actually had missing values.
+- 2x2 table: risks, risk difference, NNT and the chi-square test use the
+  observed counts; the 0.5 correction is applied only to the odds ratio and risk
+  ratio when a cell is zero.
+- Cox models accept text covariates (one-hot with a reported reference level)
+  instead of failing; log-rank works for any number of groups.
+- "LogisticRegression" and "RidgeLogistic" were the same model.
+  LogisticRegression is now an unpenalized multivariable model; the catalogue
+  no longer triggers scikit-learn deprecation warnings (SVM probabilities now
+  come from CalibratedClassifierCV).
+- Methods text now covers missing data handling, preprocessing, test results,
+  the seed and software versions, and names models by type and outcome.
+
+### Added
+- Calibration slope, calibration-in-the-large, O:E ratio and ICI with 95% CIs,
+  a flexible (lowess) calibration curve, DeLong CI for AUROC and bootstrap CIs
+  for AUPRC and Brier score.
+- Decision curve analysis (net benefit against treat all and treat none).
+- Decision thresholds chosen on the validation set (Youden, target sensitivity
+  or specificity, outcome rate, or fixed) and saved with the model; optional
+  logistic recalibration on the validation set.
+- Adjusted odds ratios with 95% CIs, reference levels and events per parameter
+  from the unpenalized logistic model.
+- Minimum sample size for prediction models (Riley et al., BMJ 2020) for binary
+  and continuous outcomes, with a check against the loaded data.
+- Competing risks: Aalen-Johansen cumulative incidence with CIs, Gray's test,
+  and the naive 1 minus Kaplan-Meier curve for comparison.
+- Kaplan-Meier risk tables, median survival with CI and survival at chosen
+  times; proportional hazards tests for Cox models (matching R cox.zph).
+- NNT and NNH with 95% CIs (Altman), Fisher's exact test.
+- Cohort builder: include or exclude rows by code lists (CPT, ICD-10, wildcards
+  and ranges, across several columns), values or ranges, with an inclusion flow
+  diagram and counts recorded in the log.
+- Leakage demonstration for teaching: trains the same model correctly and in
+  common wrong ways on the user's data and compares each with an untouched
+  lockbox.
+- Test set lock: models not tested at first use need a logged reason to be
+  tested on the internal test partition.
+- External validation on an uploaded CSV is logged and reported as such.
+- Tamper-evident analysis log (hash chain) with the data file's SHA-256, the
+  seed and library versions, and a log check in the Reports tab.
+- Missing indicator option at Confirm.
+- CLI: `samplesize`, `teach`, `cohort` and `epi cif` subcommands, threshold
+  and recalibration options for `train`.
+
 ## [1.0.0] - 2026-10-26
 
 First tagged release.

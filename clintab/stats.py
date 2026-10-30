@@ -1,11 +1,14 @@
 """stats.py
 Data profiling + descriptive statistics. Pure pandas/numpy, no Flask, no
-sklearn. Two jobs:
+sklearn. Three jobs:
 
   1. detect_column_types()  -> auto-classify each column as binary / categorical
      / continuous / date, with missingness, so the upload page can pre-fill the
      radio buttons.
   2. summarize()            -> the Data Summary section tables.
+  3. fit_missing_handling() / apply_fitted_missing_handling() -> per-column
+     missing-data decisions, with fill values learned on the training
+     partition only and then applied to every partition.
 """
 import warnings
 
@@ -94,11 +97,40 @@ def detect_column_types(df):
 
 
 def minority_fraction(series):
-    """Smallest class proportion for a binary/categorical column (for SMOTE hint)."""
+    """Smallest class proportion for a binary/categorical column (for the
+    class imbalance note)."""
     vc = series.dropna().value_counts(normalize=True)
     if vc.empty:
         return None
     return float(vc.min())
+
+
+# below this minority share the confirm step shows an imbalance note. the note
+# reports prevalence, it never recommends resampling.
+IMBALANCE_THRESHOLD = 0.30
+
+
+def class_balance(series, threshold=IMBALANCE_THRESHOLD):
+    """{minority_fraction, imbalanced} for a binary/categorical column, or
+    None if it has no non-missing values."""
+    frac = minority_fraction(series)
+    if frac is None:
+        return None
+    return {"minority_fraction": round(frac, 4), "imbalanced": bool(frac < threshold)}
+
+
+def missing_percentages(df):
+    """{col: % missing} for every column with at least one missing value,
+    measured on the frame as given (call it before any handling)."""
+    n = len(df)
+    if not n:
+        return {}
+    out = {}
+    for col in df.columns:
+        k = int(df[col].isna().sum())
+        if k:
+            out[str(col)] = round(100.0 * k / n, 2)
+    return out
 
 
 # ----------------------------------------------------------------------------
@@ -200,6 +232,12 @@ def apply_missing_handling(df, decisions):
                     value (categorical), simple/univariate imputation, matching
                     what ml.build_preprocessor already does at model-training time.
     Returns the cleaned DataFrame.
+
+    Note: fill values come from the frame passed in. Before a train/test
+    split that leaks information from the test rows, so the app itself uses
+    fit_missing_handling() on the training partition and
+    apply_fitted_missing_handling() on every partition instead. Kept for
+    backward compatibility.
     """
     df = df.copy()
     drop = [c for c, d in decisions.items() if d == "remove" and c in df.columns]
@@ -219,5 +257,99 @@ def apply_missing_handling(df, decisions):
                 mode = df[c].mode(dropna=True)
                 fill = mode.iloc[0] if not mode.empty else None
             if fill is not None and pd.notna(fill):
+                df[c] = df[c].fillna(fill)
+    return df
+
+
+# ----------------------------------------------------------------------------
+# missing data, fitted on the training partition only
+# ----------------------------------------------------------------------------
+MISSING_DECISIONS = ("include", "zero", "impute", "impute_indicator", "remove")
+_FITTED = ("impute", "impute_indicator")
+
+
+def _plain(v):
+    """numpy scalar -> plain python, so fill values go into json as-is."""
+    return v.item() if hasattr(v, "item") else v
+
+
+def _fill_value(s, ctype=None):
+    """median for continuous columns, most frequent value otherwise. ctype
+    (binary/categorical/continuous) wins over dtype, so an integer-coded
+    category like asa class gets its mode, not a median such as 2.5."""
+    s = s.dropna()
+    if s.empty:
+        return None
+    if ctype == "continuous" or (ctype not in ("binary", "categorical")
+                                 and pd.api.types.is_numeric_dtype(s)):
+        v = pd.to_numeric(s, errors="coerce").median()
+    else:
+        mode = s.mode(dropna=True)
+        v = mode.iloc[0] if not mode.empty else None
+    if v is None or pd.isna(v):
+        return None
+    return _plain(v)
+
+
+def indicator_name(col, columns):
+    """'<col>_missing', with underscores added until it doesn't clash."""
+    name = f"{col}_missing"
+    while name in columns:
+        name += "_"
+    return name
+
+
+def fit_missing_handling(train_df, decisions, coltypes=None):
+    """Learn fill values from the TRAINING partition only.
+
+    decisions: {col: 'include' | 'zero' | 'impute' | 'impute_indicator' | 'remove'}
+    coltypes:  optional {col: type}, picks median vs most frequent value.
+    Returns {"fills": {col: value}, "indicators": {col: indicator column}}.
+    fills holds the training-fitted value for each 'impute' and
+    'impute_indicator' column (None if the column is empty in training,
+    which then stays missing for the model pipeline to handle).
+    """
+    coltypes = coltypes or {}
+    fills, indicators = {}, {}
+    columns = set(map(str, train_df.columns))
+    for c, d in decisions.items():
+        if c not in train_df.columns or d not in _FITTED:
+            continue
+        fills[c] = _fill_value(train_df[c], coltypes.get(c))
+        if d == "impute_indicator":
+            indicators[c] = indicator_name(c, columns)
+            columns.add(indicators[c])
+    return {"fills": fills, "indicators": indicators}
+
+
+def apply_fitted_missing_handling(df, decisions, fitted):
+    """Apply decisions with values from fit_missing_handling() to any
+    partition (train, validation, test, or the full cleaned frame).
+       'remove'           -> drop the column
+       'zero'             -> fill NaN with 0
+       'include'          -> leave NaN, the model pipeline imputes inside the
+                             training fold
+       'impute'           -> fill NaN with the training-fitted value
+       'impute_indicator' -> add a 0/1 '<col>_missing' column, then fill as
+                             for 'impute'
+    Safe to run on data that already went through it: an indicator column
+    that is already there is kept, not recomputed from filled values.
+    """
+    df = df.copy()
+    drop = [c for c, d in decisions.items() if d == "remove" and c in df.columns]
+    if drop:
+        df = df.drop(columns=drop)
+    fills = fitted.get("fills", {})
+    indicators = fitted.get("indicators", {})
+    for c, d in decisions.items():
+        if c not in df.columns:
+            continue
+        if d == "zero":
+            df[c] = df[c].fillna(0)
+        elif d in _FITTED:
+            if d == "impute_indicator" and c in indicators and indicators[c] not in df.columns:
+                df[indicators[c]] = df[c].isna().astype(int)
+            fill = fills.get(c)
+            if fill is not None:
                 df[c] = df[c].fillna(fill)
     return df

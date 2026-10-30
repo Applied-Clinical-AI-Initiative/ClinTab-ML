@@ -227,6 +227,84 @@
   .busy .sub2{font-size:12px;color:var(--muted)}
   .busy .pbar{width:260px;height:8px;background:#e6edf5;border-radius:6px;overflow:hidden}
   .busy .pbar>i{display:block;height:100%;width:0;background:var(--brand);transition:width .15s}
+  #typeTable td label{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+  /* notices: same shape as the disclaimer, coloured by kind */
+  .disclaimer+.disclaimer{margin-top:8px}
+  .disclaimer.err{border-left-color:var(--err);background:#fdeceb}
+  .disclaimer.err .disc-icon{color:var(--err)}
+  .disclaimer.ok{border-left-color:var(--ok);background:#e8f6ee}
+  .disclaimer.ok .disc-icon{color:var(--ok)}
+  .disclaimer.info{border-left-color:var(--brand);background:#eef5fc}
+  .disclaimer.info .disc-icon{color:var(--brand)}
+  .disclaimer ul{margin:4px 0 0;padding-left:18px}
+  .disclaimer li+li{margin-top:2px}
+  .notices{margin-top:12px}
+  /* estimates with intervals */
+  .ci{color:var(--muted)}
+  td.nw,th.nw{white-space:nowrap}
+  table.compact{width:auto;min-width:320px}
+  .tbl-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0 6px}
+  .tbl-tools h4{margin:0;font-size:13px;flex:1}
+  .tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;
+    padding:1px 7px;border-radius:10px;margin-left:6px;vertical-align:1px;background:var(--chip);color:var(--brand-d)}
+  .tag.ok{background:#e8f6ee;color:#23774a}
+  .tag.warn{background:#fdf0e3;color:#a86511}
+  .tag.err{background:#fdeceb;color:#a83a2c}
+  tr.row-good td{background:#f1f9f4}
+  td.flag{color:#a86511;font-weight:700}
+  h4.sub{margin:22px 0 10px;font-size:14px;padding-top:16px;border-top:1px solid var(--line)}
+  .kv{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--muted);margin:4px 0 8px}
+  .kv b{color:var(--ink);font-weight:600}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#f1f4f8;border-radius:4px;padding:0 4px}
+  /* cohort builder */
+  .cf-list{display:flex;flex-direction:column;gap:10px}
+  .cf-empty{border:1px dashed #c9d5e3;border-radius:8px;padding:14px;text-align:center;color:var(--muted);font-size:12px;background:#fafcff}
+  .cf{border:1px solid var(--line);border-radius:8px;background:#fbfcfe;padding:12px 14px}
+  .cf-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .cf-head .cf-title{flex:1;min-width:0;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cf-head button{min-width:30px}
+  .cf-grid{display:grid;grid-template-columns:minmax(220px,1.15fr) minmax(220px,1fr) minmax(220px,1.2fr);gap:14px}
+  .cf-cols .varpick{max-height:136px;grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+  .cf-cols .colpick-tools{display:flex;gap:6px;margin-bottom:6px}
+  .cf-cols .colpick-tools input{flex:1}
+  .cf-picked{font-size:11px;color:var(--muted);margin-top:4px;min-height:16px}
+  .cf textarea{min-height:74px;resize:vertical}
+  .cf .pair{display:flex;gap:8px;align-items:center}
+  .cf .pair span{color:var(--muted);font-size:12px}
+  .flowlines{margin:0;padding:10px 14px 10px 30px;background:#f7fafd;border:1px solid var(--line);border-radius:8px;
+    font-size:12.5px;line-height:1.7}
+  .flow-wrap{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;margin-top:12px}
+  .flow-wrap>div{flex:1;min-width:300px}
+  /* calibration summary next to the calibration plot */
+  .calsum{border:1px solid var(--line);border-radius:8px;background:#fff;padding:10px 12px;max-width:470px;margin:8px 12px 0 0}
+  .calsum table{font-size:12px}
+  .calsum td{vertical-align:top}
+  .calsum .reading{color:var(--muted)}
+  /* epi jump links */
+  .jump{display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 16px}
+  .jump a{font-size:12px;background:var(--chip);color:var(--brand-d);border-radius:20px;padding:4px 12px;
+    cursor:pointer;text-decoration:none;font-weight:600}
+  .jump a:hover{background:#dfe9f4}
+  /* two-way switch */
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+  .seg button{background:#fff;color:var(--brand-d);border-radius:0;font-weight:600;padding:7px 14px}
+  .seg button:hover{background:#eef3f9}
+  .seg button.on{background:var(--brand);color:#fff}
+  .verdict{display:flex;gap:12px;align-items:flex-start;border-radius:9px;padding:14px 16px;margin:14px 0;
+    border:1px solid var(--line)}
+  .verdict.ok{background:#eef8f2;border-color:#bfe3cd}
+  .verdict.err{background:#fdf1ef;border-color:#f1c4bd}
+  .verdict .v-icon{flex:0 0 auto;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;
+    justify-content:center;font-weight:700;color:#fff}
+  .verdict.ok .v-icon{background:var(--ok)} .verdict.err .v-icon{background:var(--err)}
+  .verdict .v-title{font-weight:700;font-size:14px;margin-bottom:2px}
+  /* sidebar sub item (teaching demo sits under model testing) */
+  .nav a.nav-sub{padding-left:30px;font-size:12.5px;color:#aebfd2}
+  .nav a.nav-sub.active{color:#fff}
+  .nav .step.icon svg{width:12px;height:12px}
+  /* lead block for the teaching tab */
+  .lead-box{background:#fff;border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:0 10px 10px 0;
+    padding:14px 18px;margin:0 0 18px;font-size:13.5px;line-height:1.65}
 </style>
 </head>
 <body>
@@ -243,6 +321,7 @@
       <a data-tab="summary"><span class="step">2</span> Data Summary</a>
       <a data-tab="train"><span class="step">3</span> Model Training</a>
       <a data-tab="test"><span class="step">4</span> Model Testing</a>
+      <a data-tab="teach" class="nav-sub" title="Teaching: what leakage does to the numbers you report"><span class="step icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9l10-5 10 5-10 5-10-5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg></span> Leakage demo</a>
       <a data-tab="spline"><span class="step">5</span> Spline</a>
       <a data-tab="epi"><span class="step">6</span> Clinical Epi</a>
       <a data-tab="reports"><span class="step">7</span> Reports</a>
@@ -288,8 +367,10 @@
             <summary><span class="acc-num">1</span> Data Upload</summary>
             <p>Drop in a CSV and the app immediately profiles every column (binary, categorical,
               continuous, or date), flags anything with heavy missing data, and lets you decide
-              column by column whether to keep, fill, or drop it. Set your train / validation / test
-              split, random or stratified, and lock it in with one click.</p>
+              column by column whether to keep, fill, or drop it. Optionally build your cohort with
+              filters (procedure codes, age range and so on) and see how many patients each step
+              removes. Set your train / validation / test split, random or stratified, and lock it
+              in with one click.</p>
           </details>
           <details class="acc-item">
             <summary><span class="acc-num">2</span> Data Summary</summary>
@@ -319,7 +400,8 @@
           <details class="acc-item">
             <summary><span class="acc-num">6</span> Clinical Epi</summary>
             <p>The calculators every clinical paper eventually needs: odds ratios and risk ratios from a
-              2&times;2 table, Kaplan-Meier survival curves, Cox regression, Hosmer-Lemeshow
+              2&times;2 table, the minimum sample size for a prediction model, Kaplan-Meier survival
+              curves, Cox regression, cumulative incidence with competing risks, Hosmer-Lemeshow
               calibration, the kind of thing that usually means switching between three different
               tools.</p>
           </details>
@@ -328,6 +410,13 @@
             <p>Everything you just did gets quietly logged in the background. This tab turns that log
               into a draft methods paragraph and checks it against the TRIPOD+AI reporting checklist, so
               you know what's already covered and what you still need to write up yourself.</p>
+          </details>
+          <details class="acc-item">
+            <summary><span class="acc-num">T</span> Leakage demo (teaching)</summary>
+            <p>Train the same model the right way and in several common wrong ways on your own data,
+              and see how much each mistake would flatter the AUROC you report compared with a
+              lockbox of patients no version of the model ever touched. Built for workshops and
+              journal clubs.</p>
           </details>
         </div>
       </div>
@@ -358,10 +447,31 @@
         <h3>Column types &amp; missing-data handling</h3>
         <p class="hint">Auto-detected: <b>binary</b>=2 values, <b>categorical</b>=strings or &lt;10 integers,
           <b>continuous</b>=numeric &gt;10 values. Any column with missing data gets a handling choice,
-          defaulted by how much is missing: under 30% is imputed (median for numeric columns, most
-          frequent value for categorical), 30 to 50% is filled with 0, and over 50% is removed.
-          Override any column's choice as needed.</p>
+          defaulted by how much is missing: up to 50% is imputed (median for continuous columns, most
+          frequent value for categorical), over 50% is removed. Fill values are learned from the
+          training set only, after the split, and then applied to validation and test, so no
+          information leaks from the held-out rows. <b>Impute + missing indicator</b> also adds a 0/1
+          column marking which values were missing. <b>Fill 0</b> is never a default; use it only for
+          counts where a blank means none. Override any column's choice as needed.</p>
         <div class="scroll"><table id="typeTable"></table></div>
+      </div>
+
+      <div class="panel" id="cohortPanel" style="display:none">
+        <h3>Build cohort (optional)</h3>
+        <p class="hint" style="margin-top:0">Keep only the patients your study is about, before the data
+          are split. Filters run from top to bottom, each on the rows left by the one above, so changing
+          the order can change the counts. For code lists, paste codes separated by commas or new lines;
+          ranges such as <code>27130-27132</code> and wildcards such as <code>M16*</code> work. Tick several
+          columns (for example CPT plus OTHERCPT1 to OTHERCPT10) to match a code in any of them.</p>
+        <div class="cf-list" id="cohortFilters"></div>
+        <div class="flex" style="margin-top:12px">
+          <button class="ghost" id="cohortAddBtn" type="button">+ Add filter</button>
+          <button id="cohortPreviewBtn" type="button" style="display:none">Preview cohort</button>
+          <button class="ghost" id="cohortClearBtn" type="button" style="display:none">Remove all filters</button>
+          <span class="small muted" id="cohortStatus"></span>
+        </div>
+        <div id="cohortProblems"></div>
+        <div id="cohortResult"></div>
       </div>
 
       <div class="panel" id="splitPanel" style="display:none">
@@ -373,17 +483,21 @@
           <div><label>Method</label>
             <select id="splitMethod"><option value="random">Random</option>
               <option value="stratified">Stratified</option></select></div>
-          <div><label>Stratify / SMOTE column</label><select id="stratCol"><option value="">None</option></select></div>
+          <div><label>Stratify column</label><select id="stratCol"><option value="">None</option></select></div>
         </div>
         <div id="smoteBox" style="margin-top:12px;display:none">
           <label class="flex" style="font-weight:600;color:var(--ink)">
-            <input type="checkbox" id="smoteToggle"> Apply SMOTE to the training set (minority class &lt; 30%)</label>
-          <div class="hint" id="smoteHint"></div>
+            <input type="checkbox" id="smoteToggle"> Apply SMOTE to the training set (off by default, see note)</label>
+          <div class="hint" id="smoteHint">Resampling such as SMOTE usually worsens calibration without
+            improving discrimination (van den Goorbergh et al., JAMIA 2022). The default is no resampling,
+            with the decision threshold chosen instead. If you use SMOTE, check calibration and consider
+            recalibration.</div>
         </div>
         <div style="margin-top:16px" class="flex">
           <button id="confirmBtn">Confirm &amp; lock dataset</button>
           <span id="confirmMsg" class="small"></span>
         </div>
+        <div class="hint" id="imbalanceNote" style="display:none;margin-top:10px"></div>
       </div>
     </section>
 
@@ -394,6 +508,12 @@
       <div id="summaryEmpty" class="panel muted">Confirm a dataset first.</div>
       <div id="summaryBody" style="display:none">
         <div class="panel"><div class="cards" id="summaryCards"></div></div>
+        <div class="panel" id="cohortSummaryPanel" style="display:none">
+          <h3>Cohort selection</h3>
+          <p class="hint" style="margin-top:0">The filters applied before the split, in order. Paste the
+            lines into your methods or use the diagram as the patient flow figure.</p>
+          <div id="cohortSummary"></div>
+        </div>
         <div class="panel"><h3>Continuous variables</h3>
           <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('contTable','continuous_summary.csv')">Download CSV</button></div>
           <div class="scroll scrollx"><table id="contTable"></table></div></div>
@@ -428,7 +548,27 @@
             <div><label>Outcome</label><select id="outcomeSel"></select>
                  <div class="hint" id="taskHint"></div></div>
             <div><label>Optimize for (<span class="term" tabindex="0" data-tip="Automatically trying different model settings (hyperparameters) to find the combination that scores best.">grid search</span> metric)</label><select id="scoreSel"></select></div>
-            <div><label><span class="term" tabindex="0" data-tip="The predicted-probability cutoff above which a prediction counts as &ldquo;yes&rdquo; (default 50%).">Classification threshold</span></label><input id="thrInput" type="number" value="0.5" step="0.05" min="0" max="1"></div>
+          </div>
+          <div id="binaryOpts" style="display:none;margin-top:14px">
+            <div class="row">
+              <div style="flex:2;min-width:300px"><label><span class="term" tabindex="0" data-tip="The predicted risk above which a patient counts as positive. It is chosen on the validation set and then used unchanged on the test set, so test results stay honest.">Decision threshold</span></label>
+                <select id="thrMethod">
+                  <option value="youden" selected>Best balance of sensitivity and specificity (Youden, on validation)</option>
+                  <option value="sensitivity">Target sensitivity</option>
+                  <option value="specificity">Target specificity</option>
+                  <option value="prevalence">Outcome rate</option>
+                  <option value="fixed">Fixed value</option>
+                </select>
+                <div class="hint" id="thrMethodHint"></div></div>
+              <div id="thrTargetBox" style="display:none;max-width:220px"><label id="thrTargetLbl">Target</label>
+                <input id="thrTarget" type="number" step="0.01" min="0" max="1"></div>
+            </div>
+            <label class="flex" style="font-weight:600;color:var(--ink);margin:12px 0 0">
+              <input type="checkbox" id="recalToggle"> <span class="term" tabindex="0" data-tip="Refits the intercept and slope of the predicted risks (on the log-odds scale) on the validation set so they match the observed event rate. Risks change, the ranking of patients does not, so AUROC stays the same.">Recalibrate on the validation set</span></label>
+            <div class="hint" style="margin-top:2px">Adjusts the predicted risks so they match the event rate in
+              the validation patients, without changing how the model ranks patients. Recommended if SMOTE is on.</div>
+            <div class="hint" id="recalSmoteHint" style="display:none;color:var(--warn);font-weight:600">SMOTE is on, so
+              predicted risks will run too high. Ticking recalibration is recommended.</div>
           </div>
           <div class="grid2" style="margin-top:12px">
             <div><label>Exclusion variables (never used as features)</label>
@@ -448,7 +588,7 @@
               <span class="term" tabindex="0" data-tip="Score each candidate with k-fold cross-validation inside the training set instead of the single validation set. Helps on small datasets. Leave empty for the validation set.">CV folds</span>
               <input type="number" id="cvFolds" min="2" max="20" placeholder="off" style="width:72px"></label>
             <label class="flex" style="font-weight:600;color:var(--ink)" id="smoteTrainBox">
-              <input type="checkbox" id="smoteTrain"> <span class="term" tabindex="0" data-tip="A technique for rare outcomes: creates synthetic extra examples of the minority class so the model doesn't just learn to predict the common outcome.">SMOTE</span></label>
+              <input type="checkbox" id="smoteTrain"> <span class="term" tabindex="0" data-tip="Synthetic Minority Over-sampling Technique: adds synthetic minority-class rows to the training set. It usually worsens calibration without improving discrimination (van den Goorbergh et al., JAMIA 2022), so it is off by default. If you use it, check calibration.">SMOTE (off by default)</span></label>
           </div>
           <div class="checklist" id="modelList"></div>
           <details><summary>Edit hyperparameter grids (JSON per model)</summary>
@@ -460,12 +600,20 @@
             <button id="cancelTrainBtn" style="display:none;background:var(--err)" onclick="cancelTraining()">Cancel training</button>
             <div style="flex:1"><div class="bar" id="trainBarWrap"><i id="trainBar"></i></div></div>
             <span id="trainPct" class="small muted"></span></div>
+          <div id="trainError"></div>
           <div class="log" id="trainLog" style="margin-top:12px;display:none"></div>
+          <div class="hint" style="margin-top:10px">Not sure you have enough patients for the number of
+            predictors? Check <a onclick="goToSampleSize()" style="cursor:pointer">Sample size</a> in Clinical Epi first.</div>
         </div>
         <div class="panel" id="trainResults" style="display:none">
           <h3>Validation metrics</h3>
+          <p class="hint" style="margin-top:0">Brackets show 95% confidence intervals. The threshold column shows
+            the cutoff each model chose on the validation set and how it was chosen; Model Testing uses it unless
+            you type another.</p>
           <div class="flex" style="margin-bottom:8px"><button class="ghost sm" onclick="dlTable('valMetricsTable','validation_metrics.csv')">Download CSV</button></div>
           <div class="scrollx"><table id="valMetricsTable"></table></div>
+          <div id="valNotes"></div>
+          <div id="oddsRatiosWrap"></div>
           <div id="importanceWrap" style="margin-top:14px"></div>
           <div class="flex" style="margin-top:18px;justify-content:flex-end">
             <button onclick="document.querySelector('[data-tab=&quot;test&quot;]').click()">Move on to Model Testing →</button>
@@ -491,16 +639,19 @@
           <div><label>Test data source</label>
             <select id="testSource"><option value="test">Held-out test set</option>
               <option value="upload">Upload new CSV</option></select></div>
-          <div><label><span class="term" tabindex="0" data-tip="The predicted-probability cutoff above which a prediction counts as &ldquo;yes&rdquo; (default 50%).">Threshold</span></label><input id="testThr" type="number" value="0.5" step="0.05"></div>
+          <div><label><span class="term" tabindex="0" data-tip="The predicted risk above which a patient counts as positive. Leave empty and each model uses the threshold it chose on the validation set at training. Type a number (0 to 1) to use that for every model.">Threshold</span></label><input id="testThr" type="number" step="0.05" min="0" max="1" placeholder="saved threshold"></div>
           <div id="testUploadBox" style="display:none"><label>New CSV</label><input type="file" id="testCsv" accept=".csv"></div>
           <div style="display:flex;align-items:flex-end"><button id="testBtn">Run testing</button></div>
         </div>
       </div>
       <div class="panel" id="testResults" style="display:none">
         <h3>Results</h3>
+        <div class="hint" id="testLockNote" style="display:none;margin-bottom:10px"></div>
         <div id="testOverlay"></div>
-        <div class="scrollx" style="margin-top:12px"><table id="testMetricsTable"></table></div>
+        <p class="hint" style="margin:12px 0 6px">Brackets show 95% confidence intervals.</p>
+        <div class="scrollx"><table id="testMetricsTable"></table></div>
         <div class="flex" style="margin-top:8px"><button class="ghost sm" onclick="dlTable('testMetricsTable','test_metrics.csv')">Download CSV</button></div>
+        <div id="testDca" style="margin-top:14px"></div>
         <div id="testPlots" style="margin-top:14px"></div>
       </div>
 
@@ -519,6 +670,57 @@
             <div style="display:flex;align-items:flex-end"><button class="ghost" onclick="predictUpload()">Predict</button></div>
           </div></details>
         <div id="predResult" style="margin-top:12px"></div>
+      </div>
+    </section>
+
+    <!-- ================= leakage demo (teaching) ================= -->
+    <section class="section" id="tab-teach">
+      <h2>Leakage demo <span class="tag">teaching</span></h2>
+      <div class="lead-box">This trains the same model the right way and in several common wrong ways on your
+        own data, then scores every version on a
+        <span class="term" tabindex="0" data-tip="Patients set aside at the very start and never used for training, tuning or choosing anything. Their score is the honest estimate of how the model would do on new patients.">lockbox</span>
+        of patients that none of them ever touched. Compare what each approach would have reported with its
+        lockbox score to see how much each mistake flatters the result.</div>
+      <div id="teachEmpty" class="panel muted">Confirm a dataset first.</div>
+      <div id="teachBody" style="display:none">
+        <div class="panel">
+          <h3>Set up</h3>
+          <div class="row">
+            <div><label>Binary outcome</label><select id="teachOutcome"></select></div>
+            <div><label>Model</label><select id="teachModel">
+              <option value="logistic">Logistic regression (fairly robust to these mistakes on large data)</option>
+              <option value="random_forest" selected>Random forest (shows the effect most clearly)</option>
+              <option value="gradient_boosting">Gradient boosting</option></select></div>
+            <div style="max-width:150px"><label><span class="term" tabindex="0" data-tip="How many times the whole demo is rerun with a fresh random split. Results show the average, with the lowest and highest underneath.">Repeats</span> (1 to 5)</label>
+              <input id="teachSeeds" type="number" min="1" max="5" step="1" value="3"></div>
+            <div style="max-width:170px"><label>Max rows</label>
+              <input id="teachMaxRows" type="number" min="200" step="1000" value="20000"></div>
+          </div>
+          <div style="margin-top:12px"><label>Exclusion variables (never used as features)</label>
+            <div class="checklist varpick" id="teachExclude"></div></div>
+          <div class="hint">Leave out anything recorded after the outcome (for example follow-up time or a
+            death flag) or it will leak too. Larger data sets, more repeats, random forest and gradient boosting
+            all take longer; a few minutes is normal.</div>
+          <div class="flex" style="margin-top:14px">
+            <button id="teachBtn" type="button">Run the demo</button>
+            <button id="teachCancelBtn" type="button" style="display:none;background:var(--err)">Cancel</button>
+            <div style="flex:1"><div class="bar" id="teachBarWrap"><i id="teachBar"></i></div></div>
+            <span id="teachStatus" class="small muted"></span>
+          </div>
+          <div id="teachError"></div>
+          <div class="log" id="teachLog" style="margin-top:12px;display:none"></div>
+        </div>
+        <div class="panel" id="teachResults" style="display:none">
+          <h3>What each approach would report</h3>
+          <div id="teachNotes"></div>
+          <div class="cards" id="teachCards" style="margin:14px 0"></div>
+          <p class="hint" style="margin-top:0">Each number is the average over the repeats, with the lowest and
+            highest underneath. <b>Optimism</b> is the reported AUROC minus the honest lockbox AUROC; values of
+            0.05 or more are flagged. Click an approach to read what went wrong.</p>
+          <div class="scrollx"><table id="teachTable"></table></div>
+          <div class="flex" style="margin-top:8px"><button class="ghost sm" id="teachCsvBtn" type="button">Download CSV</button></div>
+          <div id="teachPlot" style="margin-top:14px"></div>
+        </div>
       </div>
     </section>
 
@@ -541,9 +743,16 @@
     <!-- ================= epi ================= -->
     <section class="section" id="tab-epi">
       <h2>Clinical Epidemiology</h2>
-      <p class="lead">2×2 measures, survival analysis, and goodness-of-fit.</p>
+      <p class="lead">2×2 measures, sample size, survival, competing risks and goodness-of-fit.</p>
+      <div class="jump" id="epiJump">
+        <a data-jump="epi2x2Panel">2×2 table</a>
+        <a data-jump="sampleSizePanel">Sample size</a>
+        <a data-jump="kmPanel">Kaplan-Meier and Cox</a>
+        <a data-jump="cifPanel">Competing risks</a>
+        <a data-jump="hlPanel">Hosmer-Lemeshow</a>
+      </div>
 
-      <div class="panel">
+      <div class="panel" id="epi2x2Panel">
         <h3><span class="term" tabindex="0" data-tip="How much more likely the outcome is, in odds terms, for the exposed group vs. the unexposed group.">Odds ratio</span> / <span class="term" tabindex="0" data-tip="How much more likely the outcome is, in plain risk/probability terms, for the exposed group.">Risk ratio</span> / <span class="term" tabindex="0" data-tip="Number needed to treat/harm. How many patients you'd need to treat (or expose) to cause one additional good (or bad) outcome.">NNT / NNH</span> (<span class="term" tabindex="0" data-tip="The four-cell table of exposed/unexposed crossed with outcome yes/no, used for OR/RR/NNT calculations.">2&times;2 table</span>)</h3>
         <table style="width:auto"><tr><th></th><th>Outcome +</th><th>Outcome −</th></tr>
           <tr><th>Exposed</th><td><input id="ea" type="number" value="20" style="width:90px"></td><td><input id="eb" type="number" value="80" style="width:90px"></td></tr>
@@ -552,23 +761,122 @@
         <div id="epi2x2Result" style="margin-top:12px"></div>
       </div>
 
-      <div class="panel" id="survPanel">
-        <div id="epiEmpty" class="muted">Confirm a dataset to use survival &amp; calibration tools.</div>
-        <div id="epiBody" style="display:none">
+      <div class="panel" id="sampleSizePanel">
+        <h3>Sample size (before you build a model)</h3>
+        <p class="hint" style="margin-top:0">The minimum number of patients (and events) needed to develop a
+          prediction model that will not overfit badly, using the four-step approach of Riley et al. (BMJ 2020).
+          Work it out before you choose how many predictors to consider.</p>
+        <div class="flex" style="margin-bottom:12px">
+          <div class="seg" id="ssMode">
+            <button type="button" data-mode="binary" class="on">Binary outcome</button>
+            <button type="button" data-mode="continuous">Continuous outcome</button>
+          </div>
+        </div>
+        <div id="ssBinary">
+          <div class="row">
+            <div><label><span class="term" tabindex="0" data-tip="The expected proportion of patients with the outcome, for example 0.05 for 5%.">Outcome rate</span> (0 to 1)</label>
+              <input id="ssPrev" type="number" step="0.01" min="0" max="1" placeholder="e.g. 0.05"></div>
+            <div><label><span class="term" tabindex="0" data-tip="Predictor degrees of freedom you will consider, not variables: a 4 level categorical predictor counts as 3, a spline with 4 knots as 3, and every predictor screened before modelling counts.">Candidate predictor parameters</span></label>
+              <input id="ssParams" type="number" step="1" min="1" placeholder="e.g. 12"></div>
+            <div><label>Expected model performance</label>
+              <select id="ssPerf">
+                <option value="cstatistic">C statistic (AUROC)</option>
+                <option value="csrsquared">Cox-Snell R²</option>
+                <option value="nagrsquared">Nagelkerke R²</option></select></div>
+            <div><label id="ssPerfLbl">Anticipated C statistic</label>
+              <input id="ssPerfVal" type="number" step="0.01" min="0" max="1" placeholder="e.g. 0.75"></div>
+          </div>
+          <div class="hint" id="ssPerfHint"></div>
+        </div>
+        <div id="ssContinuous" style="display:none">
+          <div class="row">
+            <div><label><span class="term" tabindex="0" data-tip="The R² you expect the model to reach, from earlier studies of similar models (adjusted R² if reported).">Anticipated R²</span></label>
+              <input id="ssR2" type="number" step="0.01" min="0" max="1" placeholder="e.g. 0.2"></div>
+            <div><label><span class="term" tabindex="0" data-tip="Predictor degrees of freedom you will consider, not variables: a 4 level categorical predictor counts as 3, a spline with 4 knots as 3, and every predictor screened before modelling counts.">Candidate predictor parameters</span></label>
+              <input id="ssParamsC" type="number" step="1" min="1" placeholder="e.g. 10"></div>
+            <div><label>Average outcome value</label>
+              <input id="ssIntercept" type="number" step="any" placeholder="e.g. 4.5"></div>
+            <div><label>Standard deviation of the outcome</label>
+              <input id="ssSd" type="number" step="any" min="0" placeholder="e.g. 2.1"></div>
+          </div>
+        </div>
+        <details style="margin-top:10px"><summary>Advanced settings</summary>
+          <div class="row" style="margin-top:8px">
+            <div><label><span class="term" tabindex="0" data-tip="How much predictions need to be pulled toward the average to correct for overfitting. 0.9 means at most 10% shrinkage is expected.">Target shrinkage</span></label>
+              <input id="ssShrink" type="number" step="0.01" min="0" max="1" value="0.9"></div>
+            <div><label><span class="term" tabindex="0" data-tip="The largest acceptable gap between the apparent and the optimism-adjusted Nagelkerke R².">Optimism in R² (delta)</span></label>
+              <input id="ssDelta" type="number" step="0.01" min="0" max="1" value="0.05"></div>
+            <div id="ssMarginBox"><label><span class="term" tabindex="0" data-tip="How precisely the overall outcome rate must be estimated: 0.05 means within 5 percentage points either way.">Margin for the outcome rate</span></label>
+              <input id="ssMargin" type="number" step="0.01" min="0" max="1" value="0.05"></div>
+          </div>
+        </details>
+        <div id="ssDataBox" style="display:none;margin-top:12px">
+          <details open><summary>Compare with my data</summary>
+            <p class="hint">Fill the outcome rate and parameter count from the confirmed dataset, and check
+              whether it is big enough. Parameters count each numeric column once and each extra category level once.</p>
+            <div class="row">
+              <div><label>Outcome in my data</label><select id="ssOutcome"></select></div>
+              <div style="display:flex;align-items:flex-end;gap:10px">
+                <button class="ghost" type="button" id="ssFillBtn">Fill from my data</button>
+                <label class="flex" style="font-weight:600;color:var(--ink);margin:0">
+                  <input type="checkbox" id="ssCompare" checked> Check my data against the result</label></div>
+            </div>
+            <div style="margin-top:10px"><label>Leave out of the predictors</label>
+              <div class="checklist varpick" id="ssExclude"></div></div>
+            <div class="small muted" id="ssFillInfo" style="margin-top:6px"></div>
+          </details>
+        </div>
+        <div class="flex" style="margin-top:14px"><button type="button" id="ssBtn">Calculate</button></div>
+        <div id="ssResult" style="margin-top:12px"></div>
+      </div>
+
+      <div id="epiEmpty" class="panel muted">Confirm a dataset to use the survival, competing risks and calibration tools.</div>
+      <div id="epiBody" style="display:none">
+        <div class="panel" id="kmPanel">
           <h3><span class="term" tabindex="0" data-tip="A curve showing the fraction of patients who have not yet had an event (like death) over time.">Kaplan-Meier</span> &amp; <span class="term" tabindex="0" data-tip="A model estimating how much various factors speed up or slow down time-to-event, as hazard ratios.">Cox proportional hazards</span></h3>
           <div class="row">
             <div><label>Time / duration</label><select id="kmTime"></select></div>
             <div><label>Event (1=event)</label><select id="kmEvent"></select></div>
             <div><label>Group (KM, optional)</label><select id="kmGroup"><option value="">None</option></select></div>
+            <div><label>Time points (optional)</label><input id="kmTimes" type="text" placeholder="e.g. 30, 90, 365"></div>
             <div style="display:flex;align-items:flex-end"><button onclick="runKM()">Kaplan-Meier</button></div>
           </div>
+          <div class="hint">Time points set the rows of the survival table and the number at risk under the
+            plot; leave empty for round steps up to the last follow-up.</div>
           <div id="kmResult" style="margin-top:12px"></div>
-          <div style="margin-top:16px"><label>Cox covariates</label>
-            <select id="coxCov" multiple size="5" style="max-width:340px"></select>
-            <div class="flex" style="margin-top:8px"><button onclick="runCox()">Fit Cox model</button></div></div>
-          <div id="coxResult" style="margin-top:12px"></div>
 
-          <h3 style="margin-top:22px"><span class="term" tabindex="0" data-tip="A test checking whether a model's predicted probabilities match the real observed event rates.">Hosmer-Lemeshow</span> calibration</h3>
+          <h4 class="sub">Cox proportional hazards</h4>
+          <div class="grid2">
+            <div><label>Covariates</label><div class="checklist varpick" id="coxCovList"></div></div>
+            <div><label>Treat as categorical (reference level)</label>
+              <div id="coxCatBox"></div>
+              <div class="hint">Text columns are always categorical. Tick a numeric code (such as ASA class 1 to 5)
+                to compare each level with a reference instead of one hazard ratio per unit.</div></div>
+          </div>
+          <div class="flex" style="margin-top:10px"><button onclick="runCox()">Fit Cox model</button></div>
+          <div id="coxResult" style="margin-top:12px"></div>
+        </div>
+
+        <div class="panel" id="cifPanel">
+          <h3><span class="term" tabindex="0" data-tip="An event that stops the event of interest from ever happening, such as death before a revision. Treating it as ordinary censoring makes 1 minus Kaplan-Meier overestimate the incidence.">Competing risks</span> (<span class="term" tabindex="0" data-tip="The chance of having had the event of interest by a given time, allowing for competing events (Aalen-Johansen estimator).">cumulative incidence</span>)</h3>
+          <p class="hint" style="margin-top:0">When another event can stop the event of interest from ever happening
+            (such as death before revision), 1 minus Kaplan-Meier treats those patients as if they could still have
+            it later, so it overestimates the incidence. The cumulative incidence function counts competing events
+            properly. Code the event column 0 for censored, the event of interest (usually 1), and any other code for
+            a competing event (for example 2 for died before revision).</p>
+          <div class="row">
+            <div><label>Time / duration</label><select id="cifTime"></select></div>
+            <div><label>Event code column</label><select id="cifEvent"></select></div>
+            <div style="max-width:160px"><label>Event of interest code</label><input id="cifCode" type="number" value="1" step="1"></div>
+            <div><label>Group (optional)</label><select id="cifGroup"><option value="">None</option></select></div>
+            <div><label>Time points (optional)</label><input id="cifTimes" type="text" placeholder="e.g. 1, 2, 5"></div>
+          </div>
+          <div class="flex" style="margin-top:10px"><button onclick="runCIF()">Estimate cumulative incidence</button></div>
+          <div id="cifResult" style="margin-top:12px"></div>
+        </div>
+
+        <div class="panel" id="hlPanel">
+          <h3><span class="term" tabindex="0" data-tip="A test checking whether a model's predicted probabilities match the real observed event rates.">Hosmer-Lemeshow</span> calibration</h3>
           <div class="row">
             <div><label>Saved binary model</label><select id="hlModel"></select></div>
             <div style="display:flex;align-items:flex-end"><button onclick="runHL()">Run on test set</button></div>
@@ -584,6 +892,10 @@
       <p class="lead">Assembled from everything logged during this session: every upload, split, model trained, and calculation run.</p>
       <div id="reportsEmpty" class="panel muted">Confirm a dataset first.</div>
       <div id="reportsBody" style="display:none">
+        <div class="panel">
+          <h3>Analysis log</h3>
+          <div class="small" id="logIntegrity"></div>
+        </div>
         <div class="panel">
           <h3>Methods text</h3>
           <p class="hint">Deterministically assembled from this session's logged actions. It is not AI-generated and not a substitute for your own review. Edit before pasting into a manuscript.</p>
@@ -640,6 +952,21 @@
     <div class="flex" style="justify-content:center">
       <button class="ghost" id="trainDoneRedo">Redo training</button>
       <button id="trainDoneTest">Go to Model Testing</button>
+    </div>
+  </div>
+</div>
+<div class="modal-overlay center" id="unlockModal">
+  <div class="panel" style="max-width:480px;width:100%;margin:0">
+    <h3 style="margin:0 0 6px">The test set has already been used</h3>
+    <p class="muted" style="margin:0 0 8px">Choosing a model after seeing test results makes those
+      test results optimistic, so testing a new model on this partition needs a reason. The reason
+      is written to the analysis log and the methods text.</p>
+    <p class="small" id="unlockModels" style="margin:0 0 8px"></p>
+    <label for="unlockReason">Reason</label>
+    <textarea id="unlockReason" rows="3" style="width:100%"></textarea>
+    <div class="flex" style="justify-content:flex-end;margin-top:12px">
+      <button class="ghost" id="unlockCancel">Cancel</button>
+      <button id="unlockOk">Test with this reason</button>
     </div>
   </div>
 </div>
