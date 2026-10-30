@@ -123,8 +123,11 @@ def _lowess_sorted(y, p, frac=LOWESS_FRAC):
     xs = p[order]
     if xs[-1] - xs[0] < 1e-12:                      # constant p
         return xs, np.full(len(xs), y.mean())
-    fit = lowess(y, p, frac=frac, it=0, delta=0.01 * (xs[-1] - xs[0]),
-                 return_sorted=True)
+    # statsmodels divides by zero on windows with no spread (tiny or tied
+    # validation sets); the fit is still defined, so keep the output quiet
+    with np.errstate(divide="ignore", invalid="ignore"):
+        fit = lowess(y, p, frac=frac, it=0, delta=0.01 * (xs[-1] - xs[0]),
+                     return_sorted=True)
     return fit[:, 0], fit[:, 1]
 
 
