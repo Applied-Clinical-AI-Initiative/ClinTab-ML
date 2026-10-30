@@ -17,6 +17,7 @@ strict JSON: NaN and infinity come back as `null`.
 |--------|----------|------|---------|
 | GET | `/api/version` | none | `{app, version}` |
 | POST | `/api/upload` | multipart `file` (CSV) | `session_id`, detected `columns`, row/col counts, a 20-row `preview` |
+| GET | `/api/demo.csv` | none | the made-up hip and knee replacement cohort from `clintab/demo.py` as a CSV download (10,000 rows, 16 columns); the page's Load demo data button posts it to `/api/upload` like any file |
 | POST | `/api/cohort/preview` | `filters` (list, as `cohort.apply_filters` takes) | `{flow, lines, n_start, n_final, png}` for the raw upload; nothing is saved. A bad filter list is a 400 `{error, problems: [...]}` |
 | POST | `/api/confirm` | `types`, `missing`, `ratios`, `method`, `stratify_col`, `smote`, `seed`, optional `cohort` (filters) | `{ok, n_train, n_val, n_test, method, smote_hint, missing_pct, fill_values, indicators, cohort}` |
 | GET | `/api/summary` | none | descriptive-statistics payload (continuous/categorical tables + summary card) |

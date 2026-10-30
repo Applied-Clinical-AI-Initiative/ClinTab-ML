@@ -242,6 +242,19 @@ drop.addEventListener("click", () => fileInput.click());
 drop.addEventListener("drop", e => { if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
 fileInput.addEventListener("change", e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
 
+// demo data: the server makes the synthetic cohort, then it goes through the normal upload
+$("demoBtn").addEventListener("click", async () => {
+  const b = $("demoBtn"); b.disabled = true;
+  try {
+    const r = await fetch("/api/demo.csv");
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const blob = await r.blob();
+    handleFile(new File([blob], "demo_hip_knee_synthetic.csv", { type: "text/csv" }));
+  } catch (e) {
+    toast("Could not load the demo data: " + e.message, "err");
+  } finally { b.disabled = false; }
+});
+
 function handleFile(file) {
   if (!file.name.toLowerCase().endsWith(".csv")) { toast("Please choose a .csv file.", "err"); return; }
   // instant in-browser preveiw (local, does not touch the server)

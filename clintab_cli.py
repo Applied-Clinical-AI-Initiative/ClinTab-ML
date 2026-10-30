@@ -54,6 +54,7 @@ from clintab import validation
 from clintab import cohort as cohort_mod
 from clintab import samplesize
 from clintab import teaching
+from clintab import demo
 
 THRESHOLD_METHODS = ("youden", "sensitivity", "specificity", "prevalence", "fixed")
 
@@ -508,6 +509,13 @@ def cmd_cohort(a):
                      "n_final": len(out), "lines": lines}, a.flow)
 
 
+
+def cmd_demo(a):
+    df = demo.make_demo_dataset(n=a.n, seed=a.seed)
+    df.to_csv(a.out, index=False)
+    print(f"  saved {len(df)} made-up hip and knee patients -> {a.out}")
+
+
 # --------------------------------------------------------------------------
 # argparse
 # --------------------------------------------------------------------------
@@ -623,6 +631,12 @@ def build_parser():
     co.add_argument("--out", help="path for the cohort CSV")
     co.add_argument("--flow", help="path for the flow as JSON")
     co.set_defaults(func=cmd_cohort)
+
+    dm = sub.add_parser("demo", help="write the made-up hip and knee demo dataset")
+    dm.add_argument("--out", default=demo.DEMO_FILENAME, help="path for the CSV")
+    dm.add_argument("--n", type=int, default=10000, help="number of patients")
+    dm.add_argument("--seed", type=int, default=2026)
+    dm.set_defaults(func=cmd_demo)
     return p
 
 

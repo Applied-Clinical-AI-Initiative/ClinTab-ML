@@ -35,6 +35,7 @@ from clintab import validation
 from clintab import cohort as cohort_mod
 from clintab import samplesize
 from clintab import teaching
+from clintab import demo
 from clintab import analysis_log
 from clintab import methods_text
 from clintab import tripod_report
@@ -278,6 +279,15 @@ def upload():
         "preview": preview,
         "preview_cols": [str(c) for c in df.columns],
     })
+
+
+@bp.route("/api/demo.csv")
+def demo_csv():
+    """the made-up hip and knee cohort from clintab/demo.py, for trying the
+    app without real data. the page loads it through the normal upload."""
+    return Response(demo.demo_csv_text(), mimetype="text/csv",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{demo.DEMO_FILENAME}"'})
 
 
 @bp.route("/api/cohort/preview", methods=["POST"])
