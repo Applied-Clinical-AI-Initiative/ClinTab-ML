@@ -61,5 +61,8 @@ if sys.platform == "darwin":
             "CFBundleDisplayName": "ClinTAB-ML",
             "CFBundleShortVersionString": __version__,
             "NSHighResolutionCapable": True,
+            # scikit-learn's wheels need macos 12, and the workflow installs the
+            # numpy and scipy builds that run there too (not the macos 14 ones)
+            "LSMinimumSystemVersion": "12.0",
         },
     )

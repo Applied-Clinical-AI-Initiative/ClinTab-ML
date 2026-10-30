@@ -8,21 +8,28 @@ runs when someone double-clicks it.
     python clintab_desktop.py               window + browser
     python clintab_desktop.py --headless    no window, stop with ctrl+c
     python clintab_desktop.py --self-test   start, run one analysis end to end, exit 0 or 1
+    python clintab_desktop.py --gui-smoke   open the real window, wait for the server, close, exit 0 or 1
 
-The packaged app keeps sessions, uploads and models in the user's local app
-data folder (not Documents, which hospitals often sync to the cloud). Running
-from source keeps them in the repo, like app.py. CLINTAB_HOME overrides both.
+The window opens before anything heavy is imported, so a slow first start
+(macOS checks every bundled library the first time) still shows something
+straight away. The packaged app keeps sessions, uploads, models and its log
+in the user's local app data folder (not Documents, which hospitals often
+sync to the cloud). Running from source keeps them in the repo, like app.py.
+CLINTAB_HOME overrides both.
 """
 import argparse
+import faulthandler
 import json
 import multiprocessing
 import os
+import platform
 import signal
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import traceback
 import urllib.request
 import webbrowser
 
@@ -46,10 +53,10 @@ def user_data_dir():
     return os.path.join(base, APP_NAME)
 
 
-def _setup_environment(self_test):
+def _setup_environment(throwaway):
     """Pick the data folder before clintab.store is imported (it reads
-    CLINTAB_HOME at import time)."""
-    if self_test:
+    CLINTAB_HOME at import time). throwaway: a temp folder, for the tests."""
+    if throwaway:
         home = tempfile.mkdtemp(prefix="clintab-selftest-")
     elif os.environ.get("CLINTAB_HOME"):
         home = os.environ["CLINTAB_HOME"]
@@ -61,16 +68,74 @@ def _setup_environment(self_test):
     os.environ["CLINTAB_HOME"] = home
     # matplotlib wants a writable cache folder, the app bundle isn't one
     os.environ.setdefault("MPLCONFIGDIR", os.path.join(home, "runtime", "matplotlib"))
-
-    # a windowed build has no console, so stdout/stderr are none and the first
-    # log line from flask would crash it. send them to a log file instead.
-    if sys.stdout is None or sys.stderr is None:
-        log_dir = os.path.join(home, "runtime")
-        os.makedirs(log_dir, exist_ok=True)
-        log = open(os.path.join(log_dir, "clintab-desktop.log"), "a", buffering=1, encoding="utf-8")
-        sys.stdout = sys.stdout or log
-        sys.stderr = sys.stderr or log
     return home
+
+
+class _Tee:
+    def __init__(self, log, other):
+        self.log, self.other = log, other
+
+    def write(self, text):
+        self.log.write(text)
+        try:
+            if self.other:
+                self.other.write(text)
+        except Exception:
+            pass
+        return len(text)
+
+    def flush(self):
+        self.log.flush()
+        try:
+            if self.other:
+                self.other.flush()
+        except Exception:
+            pass
+
+    def isatty(self):
+        return False
+
+
+def _start_log(home):
+    """runtime/clintab-desktop.log in the data folder. a packaged app has no
+    terminal, so its output goes here, and so does the traceback of a hard
+    crash. started from a terminal, output still shows there too."""
+    log_dir = os.path.join(home, "runtime")
+    os.makedirs(log_dir, exist_ok=True)
+    path = os.path.join(log_dir, "clintab-desktop.log")
+    log = open(path, "a", buffering=1, encoding="utf-8")
+    if FROZEN:
+        # everything goes to the log, and also wherever output went before
+        # (a terminal, a ci log, or nowhere when opened from finder)
+        sys.stdout, sys.stderr = _Tee(log, sys.stdout), _Tee(log, sys.stderr)
+    else:
+        sys.stdout = sys.stdout or log            # windowed builds can have none at all
+        sys.stderr = sys.stderr or log
+    faulthandler.enable(file=log, all_threads=True)
+    log.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} start | python {platform.python_version()} | "
+              f"{platform.platform()} | frozen={FROZEN} | argv={sys.argv[1:]}\n")
+
+    def to_log(exc_type, exc, tb):
+        traceback.print_exception(exc_type, exc, tb, file=log)
+    sys.excepthook = to_log
+    threading.excepthook = lambda a: to_log(a.exc_type, a.exc_value, a.exc_traceback)
+    return path
+
+
+def _alert(title, message):
+    """last resort, when even the window can't open."""
+    try:
+        if sys.platform == "darwin":
+            q = lambda s: json.dumps(s, ensure_ascii=False)     # applescript string literal
+            subprocess.run(["osascript", "-e", f"display alert {q(title)} message {q(message)} as critical"],
+                           timeout=300)
+        elif sys.platform == "win32":
+            import ctypes
+            ctypes.windll.user32.MessageBoxW(None, message, title, 0x10)
+        else:
+            print(f"{title}: {message}", file=sys.stderr)
+    except Exception:
+        traceback.print_exc()
 
 
 def _use_threads_for_joblib():
@@ -107,14 +172,51 @@ def _running_instance(store):
     return None
 
 
-def _make_server(app, port):
+def _write_instance(store, url):
+    try:
+        with open(_instance_file(store), "w") as f:
+            json.dump({"url": url, "pid": os.getpid()}, f)
+    except OSError:
+        traceback.print_exc()
+
+
+def _remove_instance(store):
+    try:
+        os.remove(_instance_file(store))
+    except OSError:
+        pass
+
+
+def _make_server(app, port, any_port=False):
     from werkzeug.serving import make_server
-    for p in ([port] if port else [DEFAULT_PORT, 0]):
+    for p in ([port] if port else [0] if any_port else [DEFAULT_PORT, 0]):
         try:
             return make_server("127.0.0.1", p, app, threaded=True)
         except OSError:
             continue
-    raise SystemExit(f"Could not start the server on port {port}.")
+    raise RuntimeError(f"could not start the server on port {port or DEFAULT_PORT}")
+
+
+def _start_server(port, any_port=False):
+    """the slow part: imports scikit-learn and the rest, then serves in a
+    background thread. returns (server, url). any_port: the tests use a free
+    port so they never clash with a copy the user has open on 8765."""
+    if FROZEN:
+        _use_threads_for_joblib()
+    import logging
+    from app import create_app
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)   # one line per request is just noise here
+    server = _make_server(create_app(), port, any_port)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, f"http://127.0.0.1:{server.server_port}/"
+
+
+def _answers(url):
+    try:
+        with urllib.request.urlopen(url + "api/version", timeout=5) as r:
+            return json.load(r).get("app") == APP_NAME
+    except Exception:
+        return False
 
 
 def open_folder(path):
@@ -126,35 +228,141 @@ def open_folder(path):
         subprocess.Popen(["xdg-open", path])
 
 
-def _window(url, home, version):
-    import tkinter as tk
-    from tkinter import ttk
+class _Window:
+    """the small control window. it is built before the server starts, so it
+    can say "starting" while the heavy imports run in the background."""
 
-    root = tk.Tk()
-    root.title(f"{APP_NAME} {version}")
-    root.resizable(False, False)
+    def __init__(self, version, home, log_path):
+        import tkinter as tk
+        from tkinter import ttk
+
+        self.home, self.log_path, self.url = home, log_path, None
+        self.root = root = tk.Tk()
+        root.title(f"{APP_NAME} {version}")
+        root.resizable(False, False)
+        try:
+            self._icon = tk.PhotoImage(file=resource("static", "assets", "acai-icon.png"))
+            root.iconphoto(True, self._icon)
+        except Exception:
+            pass
+
+        frame = ttk.Frame(root, padding=20)
+        frame.grid()
+        self.heading = ttk.Label(frame, text=f"Starting {APP_NAME}...", font=("TkDefaultFont", 13, "bold"))
+        self.heading.grid(row=0, column=0, columnspan=3, sticky="w")
+        self.body = ttk.Label(frame, wraplength=380, justify="left", text=(
+            "The first start can take a minute while your computer checks the app. "
+            "Later starts are quicker."))
+        self.body.grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 10))
+        self.link = ttk.Label(frame, text="", foreground="#2c6fb3")
+        self.link.grid(row=2, column=0, columnspan=3, sticky="w")
+        ttk.Label(frame, wraplength=380, justify="left", foreground="#6b7785",
+                  text=f"Data folder: {home}").grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 14))
+        self.open_button = ttk.Button(frame, text=f"Open {APP_NAME}", state="disabled",
+                                      command=lambda: self.url and webbrowser.open(self.url))
+        self.open_button.grid(row=4, column=0, padx=(0, 8))
+        ttk.Button(frame, text="Open data folder", command=lambda: open_folder(home)).grid(row=4, column=1, padx=(0, 8))
+        ttk.Button(frame, text="Quit", command=root.destroy).grid(row=4, column=2)
+        root.protocol("WM_DELETE_WINDOW", root.destroy)
+        root.lift()
+
+    def ready(self, url):
+        self.url = url
+        self.heading.configure(text=f"{APP_NAME} is running")
+        self.body.configure(text=(
+            "It opens in your web browser but runs only on this computer, so your data "
+            "never leaves it. Keep this window open while you work. Closing it stops "
+            f"{APP_NAME}."))
+        self.link.configure(text=url)
+        self.open_button.configure(state="normal")
+
+    def failed(self, message):
+        self.heading.configure(text=f"{APP_NAME} could not start")
+        self.body.configure(text=f"{message}\n\nThe details are in {self.log_path}. "
+                                 "Please send that file when you report the problem.")
+
+
+def _run_with_window(args, home, log_path, store, version):
     try:
-        icon = tk.PhotoImage(file=resource("static", "assets", "acai-icon.png"))
-        root.iconphoto(True, icon)
-    except Exception:
-        pass
+        win = _Window(version, home, log_path)
+    except Exception as e:                         # no display, or python built without tk
+        print(f"  no window ({type(e).__name__}: {e})", flush=True)
+        traceback.print_exc()
+        if args.gui_smoke:
+            return 1
+        if FROZEN:
+            _alert(f"{APP_NAME} is opening without its window",
+                   f"It will open in your browser. To stop it, quit {APP_NAME} from the Dock "
+                   f"or the taskbar. Details: {log_path}")
+        return _run_headless(args, home, store, version)
 
-    frame = ttk.Frame(root, padding=20)
-    frame.grid()
-    ttk.Label(frame, text=f"{APP_NAME} is running", font=("TkDefaultFont", 13, "bold")).grid(
-        row=0, column=0, columnspan=3, sticky="w")
-    ttk.Label(frame, wraplength=380, justify="left", text=(
-        "It opens in your web browser but runs only on this computer, so your data "
-        "never leaves it. Keep this window open while you work. Closing it stops "
-        f"{APP_NAME}.")).grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 10))
-    ttk.Label(frame, text=url, foreground="#2c6fb3").grid(row=2, column=0, columnspan=3, sticky="w")
-    ttk.Label(frame, wraplength=380, justify="left", foreground="#6b7785",
-              text=f"Data folder: {home}").grid(row=3, column=0, columnspan=3, sticky="w", pady=(4, 14))
-    ttk.Button(frame, text=f"Open {APP_NAME}", command=lambda: webbrowser.open(url)).grid(row=4, column=0, padx=(0, 8))
-    ttk.Button(frame, text="Open data folder", command=lambda: open_folder(home)).grid(row=4, column=1, padx=(0, 8))
-    ttk.Button(frame, text="Quit", command=root.destroy).grid(row=4, column=2)
-    root.protocol("WM_DELETE_WINDOW", root.destroy)
-    root.mainloop()
+    state, started = {}, time.monotonic()
+
+    def boot():
+        try:
+            state["server"], state["url"] = _start_server(args.port, any_port=args.gui_smoke)
+        except Exception as e:
+            traceback.print_exc()
+            state["error"] = f"{type(e).__name__}: {e}"
+
+    def poll():
+        if "error" in state:
+            win.failed(state["error"])
+            if args.gui_smoke:
+                state["exit"] = 1
+                win.root.after(500, win.root.destroy)
+            return
+        if "url" in state:
+            url = state["url"]
+            win.ready(url)
+            print(f"\n  {APP_NAME} {version} running at {url}\n  data folder: {home}\n", flush=True)
+            if args.gui_smoke:
+                state["exit"] = 0 if _answers(url) else 1
+                win.root.after(1500, win.root.destroy)
+            else:
+                _write_instance(store, url)
+                if not args.no_browser:
+                    webbrowser.open(url)
+            return
+        if args.gui_smoke and time.monotonic() - started > 600:
+            print("  gui smoke: server did not start within 10 minutes", flush=True)
+            state["exit"] = 1
+            win.root.destroy()
+            return
+        win.root.after(200, poll)
+
+    def heartbeat():                               # lets python handle signals while tk waits
+        win.root.after(500, heartbeat)
+
+    threading.Thread(target=boot, daemon=True).start()
+    win.root.after(200, poll)
+    win.root.after(500, heartbeat)
+    try:
+        win.root.mainloop()
+    finally:
+        if "server" in state:
+            state["server"].shutdown()
+        if not args.gui_smoke:
+            _remove_instance(store)
+    if args.gui_smoke:
+        print("gui smoke passed" if state.get("exit") == 0 else "gui smoke FAILED", flush=True)
+    return state.get("exit", 0)
+
+
+def _run_headless(args, home, store, version):
+    server, url = _start_server(args.port)
+    _write_instance(store, url)
+    try:
+        print(f"\n  {APP_NAME} {version} running at {url}\n  data folder: {home}\n", flush=True)
+        if not args.no_browser:
+            webbrowser.open(url)
+        while True:
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        server.shutdown()
+        _remove_instance(store)
 
 
 def _self_test(url):
@@ -235,54 +443,41 @@ def main(argv=None):
     parser.add_argument("--no-browser", action="store_true", help="don't open the browser")
     parser.add_argument("--port", type=int, default=0, help=f"port to use (default {DEFAULT_PORT}, or any free one)")
     parser.add_argument("--self-test", action="store_true", help="run one analysis end to end and exit")
+    parser.add_argument("--gui-smoke", action="store_true", help="open the window, wait for the server, close and exit")
     # macos passes a -psn_ argument to apps opened from finder
     args, _unknown = parser.parse_known_args(argv)
+    if args.gui_smoke:
+        args.no_browser = True
 
-    home = _setup_environment(args.self_test)
-    if FROZEN:
-        _use_threads_for_joblib()
-    from clintab import __version__, store         # after clintab_home is set
-    from app import create_app
-    import logging
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)   # one line per request is just noise here
+    home = _setup_environment(args.self_test or args.gui_smoke)
+    log_path = _start_log(home)
+    from clintab import __version__, store         # light, after clintab_home is set
 
-    if not args.self_test:
+    if args.self_test:
+        server, url = _start_server(args.port, any_port=True)
+        try:
+            return _self_test(url)
+        finally:
+            server.shutdown()
+
+    if not args.gui_smoke:
         url = _running_instance(store)
         if url:                                    # already open, just bring it up again
             webbrowser.open(url)
             return 0
 
-    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # so the finally below still runs
-    server = _make_server(create_app(), args.port)
-    url = f"http://127.0.0.1:{server.server_port}/"
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    if not args.self_test:
-        with open(_instance_file(store), "w") as f:
-            json.dump({"url": url, "pid": os.getpid()}, f)
-
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))   # so the clean up still runs
     try:
-        if args.self_test:
-            return _self_test(url)
-        print(f"\n  {APP_NAME} {__version__} running at {url}\n  data folder: {home}\n", flush=True)
-        if not args.no_browser:
-            webbrowser.open(url)
-        if not args.headless:
-            try:
-                _window(url, home, __version__)
-                return 0
-            except Exception as e:                 # no display, or python built without tk
-                print(f"  (no window: {e}). press ctrl+c to stop.", flush=True)
-        while True:
-            time.sleep(3600)
-    except KeyboardInterrupt:
-        return 0
-    finally:
-        server.shutdown()
-        if not args.self_test:
-            try:
-                os.remove(_instance_file(store))
-            except OSError:
-                pass
+        if args.headless:
+            return _run_headless(args, home, store, __version__)
+        return _run_with_window(args, home, log_path, store, __version__)
+    except SystemExit:
+        raise
+    except Exception as e:                         # anything unexpected: say so instead of vanishing
+        traceback.print_exc()
+        if FROZEN:
+            _alert(f"{APP_NAME} could not start", f"{type(e).__name__}: {e}\n\nDetails: {log_path}")
+        return 1
 
 
 if __name__ == "__main__":
