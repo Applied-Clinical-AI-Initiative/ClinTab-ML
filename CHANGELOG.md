@@ -4,13 +4,22 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.1.0] - 2026-10-30
 
 Methods guardrails, the statistics reviewers ask for, and teaching tools.
 Statistical outputs added here are tested against reference values from R (glm,
 pROC, survival, cmprsk, epitools, pmsampsize) and the dcurves package.
 
 ### Fixed
+- The Mac app could quit or show nothing when opened. The control window now
+  opens first and says it is starting while scikit-learn and the server load in
+  the background, so a slow first start (macOS checks every bundled library the
+  first time an app runs) no longer looks like a crash.
+- The Mac app needed macOS 14, because the build picked numpy and scipy builds
+  made for macOS 14 only. It now uses the builds that run on macOS 12 and later,
+  and macOS says so up front on anything older instead of the app crashing.
+- If the app can't start, it says why in its window (or in a system message if
+  the window itself can't open) instead of quitting silently.
 - Missing value fills chosen at Confirm were computed on the whole dataset
   before the split. They are now learned on the training partition only and the
   same values are applied to validation, test and the full cleaned dataset.
@@ -68,8 +77,22 @@ pROC, survival, cmprsk, epitools, pmsampsize) and the dcurves package.
 - Tamper-evident analysis log (hash chain) with the data file's SHA-256, the
   seed and library versions, and a log check in the Reports tab.
 - Missing indicator option at Confirm.
+- Load demo data: a made-up hip and knee replacement cohort (`clintab/demo.py`)
+  that exercises every tab, from the Data Upload tab or `clintab_cli.py demo`.
 - CLI: `samplesize`, `teach`, `cohort` and `epi cif` subcommands, threshold
   and recalibration options for `train`.
+- Every start of the desktop app writes `runtime/clintab-desktop.log` in the data
+  folder, including a traceback if it crashes outright.
+- The release workflow opens the real control window on macOS, Windows and Linux
+  (`--gui-smoke`) before packaging, and prints the app log when a step fails.
+- `packaging/constraints.txt` pins the exact library versions the installers are
+  built with, so a new pandas or numpy can't change a release unnoticed.
+- The Zenodo DOI in `CITATION.cff` and a DOI badge and citation in the README.
+
+## [1.0.1] - 2026-10-27
+
+This GitHub release was tagged on the 1.0.0 code and has no installers. The Mac
+fixes planned for it first ship in 1.1.0.
 
 ## [1.0.0] - 2026-10-26
 
@@ -205,4 +228,6 @@ First tagged release.
   in the README, the server no longer listens on all interfaces by default, and
   model names are sanitised before they are turned into paths.
 
+[1.1.0]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.1.0
+[1.0.1]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.0.0

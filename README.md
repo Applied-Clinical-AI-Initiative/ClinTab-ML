@@ -1,5 +1,7 @@
 # ClinTAB-ML
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23697356.svg)](https://doi.org/10.5281/zenodo.23697356)
+
 A local application for building and checking clinical prediction models on
 tabular data: a registry extract (ACS NSQIP, TQIP, a joint replacement
 registry), an administrative dataset, or a single-centre hospital cohort saved
@@ -74,13 +76,14 @@ You don't need Python or a terminal.
    and download the file for your computer:
    - **Windows:** `ClinTAB-ML-<version>-windows-setup.exe`. Run it and follow the steps.
      It installs for your account only, so it doesn't need admin rights.
-   - **Mac (Apple silicon):** `ClinTAB-ML-<version>-macos-arm64.dmg`. Open it and drag
-     ClinTAB-ML into Applications.
-2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. It opens
-   in your web browser, and a small ClinTAB-ML window appears. Keep that window open
+   - **Mac (Apple silicon, macOS 12 or later):** `ClinTAB-ML-<version>-macos-arm64.dmg`.
+     Open it and drag ClinTAB-ML into Applications.
+2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. A small
+   ClinTAB-ML window appears straight away and says when it's ready (the very first start
+   can take a minute), then ClinTAB-ML opens in your web browser. Keep that window open
    while you work and close it when you're done.
-3. To try it out, upload `sample_clinical.csv` from the
-   [Data folder](Data/sample_clinical.csv) and follow the tabs from top to bottom.
+3. To try it out, click **Load demo data** on the Data Upload tab (a made-up hip and
+   knee replacement cohort of 10,000 patients) and follow the tabs from top to bottom.
 
 Everything runs on your own computer. Uploaded data and trained models are kept in a
 local folder that the window's "Open data folder" button opens. The first time you
@@ -131,6 +134,7 @@ Security section below first.
 pure modules as the web app:
 
 ```bash
+python clintab_cli.py demo --out demo.csv            # the made-up hip and knee cohort
 python clintab_cli.py summarize --csv Data/sample_clinical.csv
 python clintab_cli.py models                       # list the 15 models
 python clintab_cli.py train --csv Data/sample_clinical.csv --outcome mortality_30d \
@@ -200,7 +204,10 @@ Flask session"); everything heavy lives on disk so it survives restarts.
 
 ## The seven sections (plus a teaching tab)
 
-1. **Data Upload**: drop a CSV (PapaParse preview). Flask auto-types each
+1. **Data Upload**: drop a CSV (PapaParse preview), or click **Load demo data** for a
+   made-up hip and knee replacement cohort (`clintab/demo.py`: CPT codes, missing
+   albumin, 30-day readmission, length of stay, and revision with death as a
+   competing event), enough to try every tab. Flask auto-types each
    column: *binary* = 2 unique values, *categorical* = strings or <10 unique
    integers, *continuous* = numeric >10 unique values, *date* = parses as a
    date. Any column with missing values gets a handling choice, defaulted by how
@@ -425,8 +432,14 @@ answer is visible to future users with the same question.
 
 ## Citing
 
-If you use ClinTAB-ML, please cite it using `CITATION.cff` (GitHub's "Cite this
-repository" button reads it).
+If you use ClinTAB-ML, please cite the version you used. Every release is archived on
+Zenodo, and https://doi.org/10.5281/zenodo.23697356 always points to the newest one,
+with links to each version and its own DOI. For example:
+
+> Ravindran D, Ravindran K, Abbas A. ClinTAB-ML: a clinical machine-learning web app
+> for tabular registry data. Version 1.0.0. Zenodo; 2026. doi:10.5281/zenodo.23697358
+
+GitHub's "Cite this repository" button gives the same details from `CITATION.cff`.
 
 ---
 

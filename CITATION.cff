@@ -1,6 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "ClinTAB-ML: a clinical machine-learning web app for tabular registry data"
+# concept doi: always resolves to the newest version on zenodo
+doi: 10.5281/zenodo.23697356
 type: software
 authors:
   - given-names: Dharsan
@@ -29,7 +31,7 @@ keywords:
   - TRIPOD+AI
   - reproducibility
   - epidemiology
-version: 1.0.0
-date-released: 2026-10-26
+version: 1.1.0
+date-released: 2026-10-30
 repository-code: "https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML"
 license: MIT
