@@ -80,7 +80,7 @@ def test_train_one_model_and_evaluate_binary():
 
     metrics, coords = ml.evaluate(pipe, val, "outcome", feat_cols, "binary")
     assert 0.0 <= metrics["AUROC"] <= 1.0
-    assert set(coords.keys()) == {"roc", "pr", "confusion", "calibration"}
+    assert {"roc", "pr", "confusion", "calibration"} <= set(coords.keys())
 
 
 def test_train_one_model_grid_search_default_uses_val_split_not_cv():
@@ -90,7 +90,7 @@ def test_train_one_model_grid_search_default_uses_val_split_not_cv():
     grid = {"clf__C": [0.1, 1.0]}
 
     pipe, info = ml.train_one_model(
-        "LogisticRegression", train, val, "outcome", feat_cols, "binary",
+        "RidgeLogistic", train, val, "outcome", feat_cols, "binary",
         param_grid=grid, do_grid_search=True)
 
     assert info["cv_folds"] is None
@@ -106,7 +106,7 @@ def test_train_one_model_grid_search_with_cv_folds_uses_kfold_on_train_only():
     grid = {"clf__C": [0.1, 1.0]}
 
     pipe, info = ml.train_one_model(
-        "LogisticRegression", train, val, "outcome", feat_cols, "binary",
+        "RidgeLogistic", train, val, "outcome", feat_cols, "binary",
         param_grid=grid, do_grid_search=True, cv_folds=3)
 
     assert info["cv_folds"] == 3
@@ -286,7 +286,7 @@ def test_train_and_evaluate_with_missing_outcome_rows():
 def test_train_info_records_whether_hyperparameters_were_tuned():
     df = _binary_frame(n=160)
     train, val = df.iloc[:120], df.iloc[120:]
-    _, tuned = ml.train_one_model("LogisticRegression", train, val, "outcome",
+    _, tuned = ml.train_one_model("RidgeLogistic", train, val, "outcome",
                                   ["age", "sex"], "binary",
                                   param_grid={"clf__C": [0.1, 1.0]}, do_grid_search=True)
     _, untuned = ml.train_one_model("LogisticRegression", train, val, "outcome",
@@ -311,3 +311,304 @@ def test_encode_outcome_keeps_01_and_1_apart_but_folds_1_0_into_1():
     assert classes == ["01", "1", "2"]
     y, classes = ml.encode_outcome(pd.Series([1.0, 2.0, 1.0]), "binary")
     assert classes == ["1", "2"]
+
+
+# ---------------------------------------------------------------------------
+# model catalogue: unpenalized reference model, no deprecation warnings
+# ---------------------------------------------------------------------------
+def _aor_fixture():
+    # arithmetic only (no libm calls) so the data are identical everywhere.
+    # the R golden values below were computed on exactly this frame.
+    rng = np.random.RandomState(7)
+    n = 300
+    age = np.round(rng.uniform(40, 90, n), 1)
+    bmi = np.round(rng.uniform(18, 40, n), 1)
+    sex = np.where(rng.uniform(size=n) < 0.45, "F", "M").astype(object)
+    asa = rng.randint(1, 5, n).astype(float)
+    smoker = (rng.uniform(size=n) < 0.3).astype(int)
+    risk = (0.02 + 0.004 * (age - 40) + 0.01 * (bmi - 18) + 0.08 * (sex == "M")
+            + 0.05 * (asa - 1) + 0.1 * smoker)
+    outcome = (rng.uniform(size=n) < risk).astype(int)
+    age[[3, 50, 120]] = np.nan
+    sex[[7, 99]] = np.nan
+    asa[[11, 200]] = np.nan
+    return pd.DataFrame({"age": age, "bmi": bmi, "sex": sex, "asa": asa,
+                         "smoker": smoker, "outcome": outcome})
+
+
+_AOR_COLTYPES = {"age": "continuous", "bmi": "continuous", "sex": "binary",
+                 "asa": "categorical", "smoker": "binary"}
+_AOR_FEATS = ["age", "bmi", "sex", "asa", "smoker"]
+
+# R 4.3.3, base glm on the fixture after median (age) / mode (sex = M, asa = 1,
+# the first of the tied levels 1 and 2) imputation:
+#   glm(outcome ~ age + bmi + sex + factor(asa) + factor(smoker), binomial)
+#   exp(coef), exp(confint.default), summary()$coefficients[, 4]
+_R_GLM = {
+    "age": (1.02091668802, 1.00348662276, 1.03864950487, 0.0184674914987),
+    "bmi": (1.04740660403, 1.0083042484, 1.08802536131, 0.0170335780631),
+    "sex=M": (1.74295046821, 1.05705819028, 2.87389697422, 0.0294476891122),
+    "asa=2": (1.38029898711, 0.683998226041, 2.78542432025, 0.368266880012),
+    "asa=3": (1.29146753853, 0.636658967451, 2.61975168552, 0.478463043669),
+    "asa=4": (1.79816497619, 0.891931383285, 3.62516370901, 0.100950658806),
+    "smoker=1": (1.76248679009, 1.05569191301, 2.94248695759, 0.0302183529396),
+}
+
+
+def test_catalogue_still_has_15_models():
+    assert len(ml.model_catalogue("binary")) + len(ml.model_catalogue("continuous")) == 15
+    assert set(ml.model_catalogue("binary")) == set(ml.model_catalogue("multiclass"))
+
+
+def test_logistic_regression_is_unpenalized_with_no_grid():
+    cfg = ml.model_catalogue("binary")["LogisticRegression"]
+    assert cfg["params"] == {}
+    clf = cfg["model"]
+    if ml._LOGREG_L1_RATIO_API:
+        assert clf.C == np.inf
+    else:
+        assert clf.penalty is None
+    assert ml.model_catalogue("binary")["RidgeLogistic"]["params"] == {"clf__C": [0.01, 0.1, 1, 10]}
+
+
+def test_unpenalized_logistic_regression_matches_r_glm():
+    # per-unit ORs recovered from the scaled sklearn coefficients. agreement
+    # is about 1e-7 on scikit-learn 1.9 and about 1e-5 on 1.3 (lbfgs stops
+    # earlier there); any penalty would be off by far more than 1e-4.
+    df = _aor_fixture()
+    pipe, info = ml.train_one_model("LogisticRegression", df, df, "outcome", _AOR_FEATS,
+                                    "binary", coltypes=_AOR_COLTYPES)
+    pre = pipe.named_steps["pre"]
+    names = list(pre.get_feature_names_out())
+    scale = pre.named_transformers_["num"].named_steps["scale"].scale_
+    coef = pipe.named_steps["clf"].coef_.ravel()
+    or_age = np.exp(coef[names.index("num__age")] / scale[0])
+    or_bmi = np.exp(coef[names.index("num__bmi")] / scale[1])
+    or_sex = np.exp(coef[names.index("cat__sex_M")] - coef[names.index("cat__sex_F")])
+    assert or_age == pytest.approx(_R_GLM["age"][0], rel=1e-4)
+    assert or_bmi == pytest.approx(_R_GLM["bmi"][0], rel=1e-4)
+    assert or_sex == pytest.approx(_R_GLM["sex=M"][0], rel=1e-4)
+
+
+def test_logistic_regression_ignores_a_penalty_grid():
+    df = _binary_frame(n=160)
+    train, val = df.iloc[:120], df.iloc[120:]
+    pipe, info = ml.train_one_model("LogisticRegression", train, val, "outcome",
+                                    ["age", "sex"], "binary",
+                                    param_grid={"clf__C": [0.01, 0.1]}, do_grid_search=True)
+    assert info["tuned"] is False and info["best_params"] == "default"
+    if ml._LOGREG_L1_RATIO_API:
+        assert pipe.named_steps["clf"].C == np.inf
+
+
+def _deprecations(caught):
+    return [str(w.message) for w in caught
+            if issubclass(w.category, (FutureWarning, DeprecationWarning))
+            and "deprecat" in str(w.message).lower()]
+
+
+def test_every_catalogue_model_fits_without_deprecation_warnings():
+    import warnings
+    from sklearn.model_selection import ParameterGrid
+
+    df = _binary_frame(n=160)
+    df["grp"] = np.arange(len(df)) % 3
+    df["y_cont"] = df["age"] * 0.3 + np.arange(len(df)) % 7
+    train, val = df.iloc[:120], df.iloc[120:]
+    for task, outcome in (("binary", "outcome"), ("multiclass", "grp"),
+                          ("continuous", "y_cont")):
+        for name, cfg in ml.model_catalogue(task).items():
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                pipe, _ = ml.train_one_model(name, train, val, outcome, ["age", "sex"],
+                                             task, do_grid_search=False)
+                # every grid value of the logistic family and the svm, in process
+                # (grid search runs in worker processes, where warnings are lost)
+                if "Logistic" in name or name == "SVM":
+                    for combo in ParameterGrid(cfg["params"] or [{}]):
+                        pipe.set_params(**combo).fit(train[["age", "sex"]],
+                                                     ml.encode_outcome(train[outcome], task)[0])
+            assert _deprecations(caught) == [], (task, name, _deprecations(caught))
+
+
+def test_svm_grid_accepts_old_style_parameter_names():
+    df = _binary_frame(n=160)
+    train, val = df.iloc[:120], df.iloc[120:]
+    _, info = ml.train_one_model("SVM", train, val, "outcome", ["age", "sex"], "binary",
+                                 param_grid={"clf__C": [0.5, 2.0]}, do_grid_search=True)
+    assert set(info["best_params"]) == {"clf__estimator__C"}
+    pipe, _ = ml.train_one_model("SVM", train, val, "outcome", ["age", "sex"], "binary",
+                                 do_grid_search=False)
+    proba = pipe.predict_proba(val[["age", "sex"]])
+    assert proba.shape == (40, 2)
+
+
+# ---------------------------------------------------------------------------
+# binary_metrics: backward compatible keys + calibration, CIs, flexible
+# calibration and decision curve
+# ---------------------------------------------------------------------------
+_OLD_METRIC_KEYS = ["AUROC", "AUPRC", "Sensitivity", "Specificity", "PPV", "NPV",
+                    "F1", "Brier", "Threshold", "N"]
+
+
+def _scores(n=400, seed=3):
+    rng = np.random.RandomState(seed)
+    x = rng.normal(size=n)
+    y = (rng.uniform(size=n) < 1 / (1 + np.exp(-(-1 + x)))).astype(int)
+    p = 1 / (1 + np.exp(-(-0.8 + 1.3 * x)))
+    return y, p
+
+
+def test_binary_metrics_keeps_old_keys_and_coordinates():
+    y, p = _scores()
+    metrics, coords = ml.binary_metrics(y, p, threshold=0.3)
+    for k in _OLD_METRIC_KEYS:
+        assert k in metrics
+    assert metrics["Threshold"] == 0.3 and metrics["N"] == 400
+    assert set(coords["roc"]) == {"fpr", "tpr", "auc"}
+    assert set(coords["pr"]) == {"precision", "recall", "ap"}
+    assert set(coords["confusion"]) == {"tn", "fp", "fn", "tp"}
+    assert set(coords["calibration"]) == {"prob_true", "prob_pred"}
+    # old positional call still works
+    m2, _ = ml.binary_metrics(y, p, 0.3)
+    assert m2["Sensitivity"] == metrics["Sensitivity"]
+
+
+def test_binary_metrics_adds_calibration_and_intervals():
+    from clintab import validation as V
+    y, p = _scores()
+    metrics, coords = ml.binary_metrics(y, p)
+    cal = V.calibration_stats(y, p)
+    assert metrics["CalibrationSlope"] == round(cal["slope"], 4)
+    assert metrics["CalibrationInTheLarge"] == round(cal["citl"], 4)
+    assert metrics["OE_ratio"] == round(cal["oe_ratio"], 4)
+    assert metrics["ICI"] == round(cal["ici"], 4)
+    ci = metrics["CI"]
+    assert set(ci) == {"AUROC", "AUPRC", "Brier", "CalibrationSlope",
+                       "CalibrationInTheLarge", "OE_ratio"}
+    for k, (lo, hi) in ci.items():
+        assert lo <= hi, k
+    assert ci["AUROC"][0] <= metrics["AUROC"] <= ci["AUROC"][1]
+    assert ci["AUPRC"][0] <= metrics["AUPRC"] <= ci["AUPRC"][1]
+    assert ci["Brier"][0] <= metrics["Brier"] <= ci["Brier"][1]
+    _, lo, hi = V.auroc_ci(y, p)
+    assert ci["AUROC"] == [round(lo, 4), round(hi, 4)]
+
+    flex = coords["calibration_flexible"]
+    assert flex["method"] == "lowess" and len(flex["p_grid"]) == len(flex["observed"]) == 100
+    dca = coords["dca"]
+    assert set(dca) == {"threshold", "net_benefit", "treat_all", "treat_none"}
+    assert len(dca["threshold"]) == 99
+    assert coords["calibration_stats"]["e90"] is not None
+    hist = coords["risk_histogram"]
+    assert len(hist["edges"]) == 41 and len(hist["counts"]) == 40
+    assert sum(hist["counts"]) == 400
+    assert hist["edges"][-1] == pytest.approx(p.max(), abs=1e-6)
+
+
+def test_binary_metrics_is_deterministic_and_ci_can_be_switched_off():
+    y, p = _scores()
+    a, _ = ml.binary_metrics(y, p)
+    b, _ = ml.binary_metrics(y, p)
+    assert a == b
+    m, coords = ml.binary_metrics(y, p, with_ci=False)
+    assert "CI" not in m
+    assert "CalibrationSlope" in m and "dca" in coords
+
+
+def test_binary_metrics_one_class_gives_none_not_a_crash():
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m, coords = ml.binary_metrics(np.zeros(20, dtype=int), np.linspace(0.05, 0.5, 20))
+    assert m["CalibrationSlope"] is None and m["CalibrationInTheLarge"] is None
+    assert m["CI"]["AUROC"] == [None, None]
+    assert coords["calibration_stats"]["reason"]
+
+
+def test_evaluate_passes_with_ci_through():
+    df = _binary_frame(n=160)
+    train, val = df.iloc[:120], df.iloc[120:]
+    pipe, _ = ml.train_one_model("LogisticRegression", train, val, "outcome",
+                                 ["age", "sex"], "binary", do_grid_search=False)
+    m, _ = ml.evaluate(pipe, val, "outcome", ["age", "sex"], "binary")
+    assert "CI" in m
+    m, _ = ml.evaluate(pipe, val, "outcome", ["age", "sex"], "binary", with_ci=False)
+    assert "CI" not in m
+
+
+# ---------------------------------------------------------------------------
+# adjusted odds ratios + parameter counts
+# ---------------------------------------------------------------------------
+def test_adjusted_odds_ratios_match_r_glm():
+    r = ml.adjusted_odds_ratios(_aor_fixture(), "outcome", _AOR_FEATS, _AOR_COLTYPES)
+    assert [row["term"] for row in r["rows"]] == list(_R_GLM)
+    for row in r["rows"]:
+        odds, lo, hi, p = _R_GLM[row["term"]]
+        assert row["or"] == pytest.approx(odds, rel=1e-6), row["term"]
+        assert row["ci_low"] == pytest.approx(lo, rel=1e-6), row["term"]
+        assert row["ci_high"] == pytest.approx(hi, rel=1e-6), row["term"]
+        assert row["p"] == pytest.approx(p, rel=1e-6), row["term"]
+    assert r["n"] == 300 and r["events"] == 111
+    assert r["n_parameters"] == 7
+    assert r["epp"] == round(111 / 7, 2)
+    assert r["reference_levels"] == {"sex": "F", "asa": "1", "smoker": "0"}
+    assert r["imputed"] == {"age": 63.9, "sex": "M", "asa": "1"}
+    assert r["n_missing"] == {"age": 3, "sex": 2, "asa": 2}
+    assert r["converged"] is True and r["warning"] is None
+    assert r["outcome_level"] == "1"
+
+
+def test_adjusted_odds_ratios_reference_override():
+    r = ml.adjusted_odds_ratios(_aor_fixture(), "outcome", _AOR_FEATS, _AOR_COLTYPES,
+                                reference={"sex": "M"})
+    row = next(x for x in r["rows"] if x["variable"] == "sex")
+    assert row["term"] == "sex=F" and row["level"] == "F"
+    assert row["or"] == pytest.approx(1 / _R_GLM["sex=M"][0], rel=1e-6)
+    assert r["reference_levels"]["sex"] == "M"
+
+
+def test_count_parameters():
+    df = _aor_fixture()
+    assert ml.count_parameters(df, _AOR_FEATS, _AOR_COLTYPES) == 7
+    # without coltypes asa and smoker are numeric, sex is text -> 1 + 1 + 1 + 1 + 1
+    assert ml.count_parameters(df, _AOR_FEATS) == 5
+    df["empty"] = np.nan
+    assert ml.count_parameters(df, ["empty"]) == 0
+
+
+def test_adjusted_odds_ratios_flags_separation_and_collinearity_without_crashing():
+    import warnings
+    df = _aor_fixture()
+    df["grp"] = np.where(np.arange(len(df)) < 20, "rare", "common")
+    df.loc[:19, "outcome"] = 0                    # no events in the rare group
+    df["const"] = 5.0
+    df["age_twice"] = df["age"] * 2
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")             # nothing leaks out as a warning
+        r = ml.adjusted_odds_ratios(df, "outcome", ["age", "grp", "const", "age_twice"])
+    assert [row["term"] for row in r["rows"]] == ["age", "grp=rare"]
+    assert "separation" in r["warning"] and "grp=rare" in r["warning"]
+    assert "const" in r["warning"] and "age_twice" in r["warning"]
+    assert r["n_parameters"] == 4
+
+
+def test_adjusted_odds_ratios_complete_separation():
+    d = pd.DataFrame({"x": np.arange(40.0), "outcome": (np.arange(40) >= 20).astype(int)})
+    r = ml.adjusted_odds_ratios(d, "outcome", ["x"])
+    assert "separation" in r["warning"] and "x" in r["warning"]
+    assert len(r["rows"]) == 1
+
+
+def test_adjusted_odds_ratios_text_outcome_imputation_and_bad_outcomes():
+    d = pd.DataFrame({"x": [1.0, np.nan, 3.0, 4.0, 5.0, 2.0, 6.0, 7.0],
+                      "o": ["no", "yes", "no", "yes", "no", None, "yes", "no"]})
+    r = ml.adjusted_odds_ratios(d, "o", ["x"])
+    assert r["n"] == 7 and r["events"] == 3        # missing outcome row dropped
+    assert r["outcome_level"] == "yes"
+    assert r["imputed"] == {"x": 4.5}              # median of the rows kept
+    with pytest.raises(ValueError):
+        ml.adjusted_odds_ratios(pd.DataFrame({"x": [1, 2, 3], "o": [0, 1, 2]}), "o", ["x"])
+    with pytest.raises(ValueError):
+        ml.adjusted_odds_ratios(pd.DataFrame({"x": [1, 2, 3], "o": [1, 1, 1]}), "o", ["x"])
+

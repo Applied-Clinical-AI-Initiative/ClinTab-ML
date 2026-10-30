@@ -9,6 +9,7 @@ Clinicians use ClinTAB-ML as a normal desktop app. They download one file, open 
 | `windows-installer.iss` | Inno Setup script for the Windows installer. It installs per user into `%LOCALAPPDATA%\Programs`, so no admin rights are needed, and adds Start menu and optional desktop shortcuts. |
 | `icon.png` | App icon, 1024 px, cut from `assets/CircleACAI.png`. |
 | `requirements-build.txt` | Runtime requirements plus PyInstaller and Pillow. |
+| `constraints.txt` | Exact versions every installer is built with. Change them on purpose only, then test a build. |
 
 ## Releasing
 
@@ -16,11 +17,12 @@ Clinicians use ClinTAB-ML as a normal desktop app. They download one file, open 
 
 1. checks that the release tag matches `clintab.__version__` (tag `v1.0.0` for version `1.0.0`)
 2. runs the test suite
-3. builds the app and runs `--self-test` inside the packaged build
-4. makes the downloads and attaches them to the release:
+3. builds the app from the pinned versions in `constraints.txt` (on the Mac, with the numpy and scipy builds that run on macOS 12)
+4. runs `--self-test` inside the packaged build, then `--gui-smoke`, which opens the real control window, waits for the server and closes it
+5. makes the downloads and attaches them to the release:
    - `ClinTAB-ML-<version>-windows-setup.exe` (installer, the one clinicians should use)
    - `ClinTAB-ML-<version>-windows-portable.zip` (unzip and run, for locked down machines)
-   - `ClinTAB-ML-<version>-macos-arm64.dmg` (Apple silicon Macs, drag to Applications)
+   - `ClinTAB-ML-<version>-macos-arm64.dmg` (Apple silicon Macs on macOS 12 or later, drag to Applications)
    - `ClinTAB-ML-<version>-linux-x64.tar.gz`
 
 To try a build without releasing, open the Actions tab on GitHub, pick "Desktop app" and press "Run workflow". The files appear as downloadable artifacts on that run.
@@ -47,6 +49,17 @@ PyInstaller only builds for the system it runs on, so a Windows build needs Wind
 | Linux | `~/.local/share/ClinTAB-ML` |
 
 These are local, unsynced folders on purpose. Documents and Desktop are often synced to OneDrive or iCloud on hospital machines, and uploaded cohorts must not leave the computer. "Open data folder" in the control window opens it, and "Clear all data" in the app deletes every uploaded dataset. Uninstalling the app does not delete this folder.
+
+## When the app won't open
+
+Every start writes a log, `runtime/clintab-desktop.log`, in the data folder (table above). A crash leaves its traceback there too. Two quick checks on a Mac:
+
+```bash
+cat ~/Library/Application\ Support/ClinTAB-ML/runtime/clintab-desktop.log
+/Applications/ClinTAB-ML.app/Contents/MacOS/ClinTAB-ML        # runs it with output in the terminal
+```
+
+On Windows the log is `%LOCALAPPDATA%\ClinTAB-ML\runtime\clintab-desktop.log`. If the app can't start it also says why in its window, or in a system message when the window itself can't open.
 
 ## Things to know before giving it to clinicians
 

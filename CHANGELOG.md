@@ -4,6 +4,96 @@ All notable changes to this project are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - 2026-10-30
+
+Methods guardrails, the statistics reviewers ask for, and teaching tools.
+Statistical outputs added here are tested against reference values from R (glm,
+pROC, survival, cmprsk, epitools, pmsampsize) and the dcurves package.
+
+### Fixed
+- The Mac app could quit or show nothing when opened. The control window now
+  opens first and says it is starting while scikit-learn and the server load in
+  the background, so a slow first start (macOS checks every bundled library the
+  first time an app runs) no longer looks like a crash.
+- The Mac app needed macOS 14, because the build picked numpy and scipy builds
+  made for macOS 14 only. It now uses the builds that run on macOS 12 and later,
+  and macOS says so up front on anything older instead of the app crashing.
+- If the app can't start, it says why in its window (or in a system message if
+  the window itself can't open) instead of quitting silently.
+- Missing value fills chosen at Confirm were computed on the whole dataset
+  before the split. They are now learned on the training partition only and the
+  same values are applied to validation, test and the full cleaned dataset.
+- Columns with 30 to 50% missing defaulted to "fill with 0" (an NSQIP albumin
+  column would have become 0 g/dL for about 44% of patients). The default is now
+  training-fitted imputation up to 50% and removal above; zero fill is still
+  available for counts where missing means none.
+- The app recommended SMOTE whenever the minority class was under 30%. It now
+  reports the imbalance and explains that resampling usually worsens
+  calibration without improving discrimination (van den Goorbergh et al.,
+  JAMIA 2022); SMOTE stays opt-in.
+- TRIPOD+AI report: a random internal test split no longer counts as external
+  validation (new internal validation item), Hosmer-Lemeshow alone no longer
+  counts as calibration, sample size is only marked found when a calculation was
+  run, not resampling is no longer penalised, and the missing data item checks
+  whether the data actually had missing values.
+- 2x2 table: risks, risk difference, NNT and the chi-square test use the
+  observed counts; the 0.5 correction is applied only to the odds ratio and risk
+  ratio when a cell is zero.
+- Cox models accept text covariates (one-hot with a reported reference level)
+  instead of failing; log-rank works for any number of groups.
+- "LogisticRegression" and "RidgeLogistic" were the same model.
+  LogisticRegression is now an unpenalized multivariable model; the catalogue
+  no longer triggers scikit-learn deprecation warnings (SVM probabilities now
+  come from CalibratedClassifierCV).
+- Methods text now covers missing data handling, preprocessing, test results,
+  the seed and software versions, and names models by type and outcome.
+
+### Added
+- Calibration slope, calibration-in-the-large, O:E ratio and ICI with 95% CIs,
+  a flexible (lowess) calibration curve, DeLong CI for AUROC and bootstrap CIs
+  for AUPRC and Brier score.
+- Decision curve analysis (net benefit against treat all and treat none).
+- Decision thresholds chosen on the validation set (Youden, target sensitivity
+  or specificity, outcome rate, or fixed) and saved with the model; optional
+  logistic recalibration on the validation set.
+- Adjusted odds ratios with 95% CIs, reference levels and events per parameter
+  from the unpenalized logistic model.
+- Minimum sample size for prediction models (Riley et al., BMJ 2020) for binary
+  and continuous outcomes, with a check against the loaded data.
+- Competing risks: Aalen-Johansen cumulative incidence with CIs, Gray's test,
+  and the naive 1 minus Kaplan-Meier curve for comparison.
+- Kaplan-Meier risk tables, median survival with CI and survival at chosen
+  times; proportional hazards tests for Cox models (matching R cox.zph).
+- NNT and NNH with 95% CIs (Altman), Fisher's exact test.
+- Cohort builder: include or exclude rows by code lists (CPT, ICD-10, wildcards
+  and ranges, across several columns), values or ranges, with an inclusion flow
+  diagram and counts recorded in the log.
+- Leakage demonstration for teaching: trains the same model correctly and in
+  common wrong ways on the user's data and compares each with an untouched
+  lockbox.
+- Test set lock: models not tested at first use need a logged reason to be
+  tested on the internal test partition.
+- External validation on an uploaded CSV is logged and reported as such.
+- Tamper-evident analysis log (hash chain) with the data file's SHA-256, the
+  seed and library versions, and a log check in the Reports tab.
+- Missing indicator option at Confirm.
+- Load demo data: a made-up hip and knee replacement cohort (`clintab/demo.py`)
+  that exercises every tab, from the Data Upload tab or `clintab_cli.py demo`.
+- CLI: `samplesize`, `teach`, `cohort` and `epi cif` subcommands, threshold
+  and recalibration options for `train`.
+- Every start of the desktop app writes `runtime/clintab-desktop.log` in the data
+  folder, including a traceback if it crashes outright.
+- The release workflow opens the real control window on macOS, Windows and Linux
+  (`--gui-smoke`) before packaging, and prints the app log when a step fails.
+- `packaging/constraints.txt` pins the exact library versions the installers are
+  built with, so a new pandas or numpy can't change a release unnoticed.
+- The Zenodo DOI in `CITATION.cff` and a DOI badge and citation in the README.
+
+## [1.0.1] - 2026-10-27
+
+This GitHub release was tagged on the 1.0.0 code and has no installers. The Mac
+fixes planned for it first ship in 1.1.0.
+
 ## [1.0.0] - 2026-10-26
 
 First tagged release.
@@ -138,4 +228,6 @@ First tagged release.
   in the README, the server no longer listens on all interfaces by default, and
   model names are sanitised before they are turned into paths.
 
+[1.1.0]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.1.0
+[1.0.1]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Applied-Clinical-AI-Initiative/ClinTab-ML/releases/tag/v1.0.0

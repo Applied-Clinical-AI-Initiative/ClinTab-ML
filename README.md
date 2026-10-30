@@ -1,49 +1,70 @@
 # ClinTAB-ML
 
-A single-page **clinical machine-learning web app** for tabular registry data
-(TQIP, NSQIP, and any CSV cohort). It is the nexus for an ML study: upload a
-CSV, profile it, train and compare models, test them with full diagnostic
-plots, fit splines, and run standard clinical-epidemiology calculators, all
-from one page, all processed in Python.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23697356.svg)](https://doi.org/10.5281/zenodo.23697356)
+
+A local application for building and checking clinical prediction models on
+tabular data: a registry extract (ACS NSQIP, TQIP, a joint replacement
+registry), an administrative dataset, or a single-centre hospital cohort saved
+as a CSV. It runs on the researcher's own computer, needs no programming, and
+builds in the methods conventions that prediction model studies are most often
+criticised for missing.
 
 One HTML page talks to one Flask backend. JavaScript only handles the UI and
 `fetch` calls. **PapaParse** previews the CSV instantly in the browser; the raw
 file still goes to Flask, which does *all* real parsing, statistics and ML with
-pandas / scikit-learn. Every chart is rendered **server-side with matplotlib**
-and returned as a PNG (with PDF / CSV export), with no SVG, canvas or Chart.js.
+pandas / scikit-learn / statsmodels / lifelines. Every chart is rendered
+**server-side with matplotlib** and returned as a PNG (with PDF / CSV export).
 
 ---
 
 ## Statement of need
 
-Clinical researchers working with registry data (TQIP, NSQIP, single-center
-cohorts) typically stitch together an ML study from several disconnected
-tools: a notebook for data profiling, hand-written scikit-learn code for
-model comparison, a separate online calculator for odds ratios and NNT, and
-another package entirely for Kaplan-Meier or Cox survival analysis. Each
-hand-off is a place for the leakage-free validation and correction
-conventions clinical work depends on (e.g. scoring hyperparameter search on
-a held-out validation set rather than the training fold, or applying a
-Haldane-Anscombe correction to a 2x2 table with a zero cell) to quietly get
-skipped. Several of those disconnected tools (online calculators, cloud
-AutoML platforms) also mean patient-derived data leaving the researcher's
-machine and landing on a third party's server, which is a real problem for
-registry data that is rarely fully de-identified.
+Reviews of clinical prediction models keep finding the same problems. In
+orthopaedic surgery, for example, a review of 433 machine learning prognostic
+studies found that 36% reported calibration, and among those published in the
+leading orthopaedic journals the median study reported 45% of TRIPOD+AI items
+(Kuijten et al., J Clin Epidemiol 2026). Common errors in the
+analysis itself inflate reported performance: oversampling before the data are
+split puts synthetic copies of patients into the test set, and tuning on the
+partition used for reporting rewards chance. On 292,373 ACS NSQIP arthroplasty
+patients, SMOTE applied before splitting inflated the reported AUROC of tree
+models by up to 0.49, and the inflation was still about 0.4 at 100,000 patients.
 
-ClinTAB-ML exists to remove those hand-offs. It is a single local tool that
-takes a research team from a raw CSV through column profiling, model
-training and tuning across 15 algorithms, full diagnostic evaluation
-(ROC/PR/calibration/Hosmer-Lemeshow), restricted cubic splines, and the
-standard clinical-epidemiology calculators, all with the conventions
-clinical prediction-model work expects built in by default rather than
-left to whoever wrote that day's notebook, and all running on the
-researcher's own machine so the data never has to leave it (see "Runs
-entirely on your machine" below). It targets researchers who want to move
-from cohort to trained, evaluated model without switching tools, sending
-data off-machine, or re-deriving the same statistical corrections each
-time, and who would otherwise be choosing between general-purpose,
-cloud-hosted AutoML tools (which don't know what a Hosmer-Lemeshow test is,
-and don't keep the data local) and writing the whole pipeline by hand.
+General tools leave these decisions to the analyst. In a notebook, a visual
+workflow tool or a script written by a chat assistant, a leaky pipeline and a
+correct one are equally easy to produce and look the same in the output. Cloud
+tools and chat assistants also usually can't be used with patient data or with
+registry files held under a data use agreement.
+
+ClinTAB-ML makes the decisions the literature agrees on part of the software and
+records every step it takes:
+
+- **Leakage safe by construction.** Missing value fills are learned on the
+  training partition only, resampling (if chosen at all) happens inside the
+  training fold, hyperparameters are tuned on the validation set, decision
+  thresholds are chosen on validation data, and the test partition is locked
+  after its first use.
+- **The outputs reviewers ask for.** Discrimination and calibration with 95%
+  CIs (calibration slope, calibration-in-the-large, O:E ratio, ICI and a
+  flexible calibration curve), decision curve analysis, optional recalibration,
+  adjusted odds ratios from an unpenalized logistic model, Riley minimum sample
+  size, Kaplan-Meier with risk tables, Cox models with proportional hazards
+  tests, competing-risk cumulative incidence with Gray's test, and the usual 2x2
+  calculations with CIs.
+- **Any tabular study.** A cohort builder includes or excludes rows by code
+  lists (CPT, ICD-10, wildcards and ranges, across several columns), values or
+  ranges, and records the inclusion flow with counts.
+- **A record a reviewer can check.** A tamper-evident analysis log (with the
+  data file's hash, the seed and every library version) from which the tool
+  writes a methods paragraph and a TRIPOD+AI coverage table.
+- **Teaching.** A leakage demonstration trains the same model correctly and in
+  several common wrong ways on the user's own data, and compares what each would
+  report with an untouched lockbox.
+- **Local.** Nothing leaves the computer; the page makes no network requests.
+
+Statistical outputs are tested against reference values from R (glm, pROC,
+survival, cmprsk, epitools, pmsampsize) and the dcurves package. The restricted
+cubic spline is the exception (see Known limitations).
 
 ---
 
@@ -55,13 +76,14 @@ You don't need Python or a terminal.
    and download the file for your computer:
    - **Windows:** `ClinTAB-ML-<version>-windows-setup.exe`. Run it and follow the steps.
      It installs for your account only, so it doesn't need admin rights.
-   - **Mac (Apple silicon):** `ClinTAB-ML-<version>-macos-arm64.dmg`. Open it and drag
-     ClinTAB-ML into Applications.
-2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. It opens
-   in your web browser, and a small ClinTAB-ML window appears. Keep that window open
+   - **Mac (Apple silicon, macOS 12 or later):** `ClinTAB-ML-<version>-macos-arm64.dmg`.
+     Open it and drag ClinTAB-ML into Applications.
+2. Open ClinTAB-ML from the Start menu, the desktop shortcut or Applications. A small
+   ClinTAB-ML window appears straight away and says when it's ready (the very first start
+   can take a minute), then ClinTAB-ML opens in your web browser. Keep that window open
    while you work and close it when you're done.
-3. To try it out, upload `sample_clinical.csv` from the
-   [Data folder](Data/sample_clinical.csv) and follow the tabs from top to bottom.
+3. To try it out, click **Load demo data** on the Data Upload tab (a made-up hip and
+   knee replacement cohort of 10,000 patients) and follow the tabs from top to bottom.
 
 Everything runs on your own computer. Uploaded data and trained models are kept in a
 local folder that the window's "Open data folder" button opens. The first time you
@@ -112,6 +134,7 @@ Security section below first.
 pure modules as the web app:
 
 ```bash
+python clintab_cli.py demo --out demo.csv            # the made-up hip and knee cohort
 python clintab_cli.py summarize --csv Data/sample_clinical.csv
 python clintab_cli.py models                       # list the 15 models
 python clintab_cli.py train --csv Data/sample_clinical.csv --outcome mortality_30d \
@@ -142,12 +165,16 @@ Flask. That keeps the analysis modules importable and testable without a server:
 | `app.py` | Creates the Flask app and starts the server. Nothing else. | yes |
 | `routes.py` | **All** HTTP endpoints + the SSE stream. Parses requests, calls the modules below, returns JSON / streams / downloads. No stats or sklearn logic. | yes |
 | `clintab/ml.py` | All sklearn: the 15 models, preprocessing, validation-set grid search, SMOTE, metrics, feature importance, single prediction. | **no** |
-| `clintab/stats.py` | Column-type detection + descriptive summaries. | **no** |
+| `clintab/validation.py` | Calibration slope, calibration-in-the-large, O:E and ICI, flexible calibration curve, DeLong and bootstrap CIs, decision curves, threshold choice, logistic recalibration. | **no** |
+| `clintab/stats.py` | Column-type detection, descriptive summaries, missing value handling fitted on the training partition. | **no** |
+| `clintab/cohort.py` | Cohort builder: code lists, values and ranges across columns, with the inclusion flow. | **no** |
 | `clintab/spline.py` | Restricted cubic splines (patsy + statsmodels). | **no** |
-| `clintab/epi.py` | Clinical epi: OR, RR, NNT/NNH, Kaplan-Meier, Cox, Hosmer-Lemeshow (lifelines/scipy). | **no** |
+| `clintab/epi.py` | Clinical epi: OR, RR, NNT/NNH with CIs, Kaplan-Meier with risk tables, Cox with proportional hazards tests, competing-risk cumulative incidence with Gray's test, Hosmer-Lemeshow. | **no** |
+| `clintab/samplesize.py` | Minimum sample size for prediction models (Riley et al.), binary and continuous outcomes. | **no** |
+| `clintab/teaching.py` | Leakage demonstration: the same model trained correctly and in common wrong ways, compared with an untouched lockbox. | **no** |
 | `clintab/plots.py` | matplotlib → base64 PNG / PDF rendering. | **no** |
 | `clintab/store.py` | Filesystem layout + session metadata (paths, JSON). | **no** |
-| `clintab/analysis_log.py` | Append-only JSON Lines log of every action in a session. | **no** |
+| `clintab/analysis_log.py` | Append-only, hash-chained JSON Lines log of every action in a session. | **no** |
 | `clintab/methods_text.py` | Template-based methods paragraph built from the log (no language model). | **no** |
 | `clintab/tripod_report.py` | TRIPOD+AI reporting coverage built from the log. | **no** |
 | `static/index.html` + `static/app.js` | The single-page UI (PapaParse is bundled in `static/vendor/`). | n/a |
@@ -175,17 +202,32 @@ Flask session"); everything heavy lives on disk so it survives restarts.
 
 ---
 
-## The seven sections
+## The seven sections (plus a teaching tab)
 
-1. **Data Upload**: drop a CSV (PapaParse preview). Flask auto-types each
+1. **Data Upload**: drop a CSV (PapaParse preview), or click **Load demo data** for a
+   made-up hip and knee replacement cohort (`clintab/demo.py`: CPT codes, missing
+   albumin, 30-day readmission, length of stay, and revision with death as a
+   competing event), enough to try every tab. Flask auto-types each
    column: *binary* = 2 unique values, *categorical* = strings or <10 unique
    integers, *continuous* = numeric >10 unique values, *date* = parses as a
    date. Any column with missing values gets a handling choice, defaulted by how
-   much is missing (**impute** under 30 %, **fill 0** from 30 to 50 %, **remove**
-   above 50 %, or **include as-is**). Per-row radio buttons override any type. Set the split (default
-   **70/15/15**, random or stratified), pick a stratify/SMOTE column; if its
-   minority class <30 % a SMOTE toggle appears. **Confirm** cleans, splits, and
-   saves the partitions, locking the config into the session.
+   much is missing (**impute** up to 50 %, **remove** above 50 %); you can also
+   choose **impute + missing indicator**, **leave missing** (the model pipeline
+   imputes inside the training data), or **fill 0** (never a default, only for
+   counts where a blank means none). Columns with 30 % or more missing get a note
+   to consider whether missingness is informative. Fill values are learned from
+   the training partition only, after the split, and then applied to validation,
+   test and external data. Per-row radio buttons override any type. Set the split
+   (default **70/15/15**, random or stratified) and an optional stratify column.
+   If its minority class is under 30 % the app shows an imbalance note: resampling
+   such as SMOTE usually worsens calibration without improving discrimination
+   (van den Goorbergh et al., JAMIA 2022), so SMOTE stays off unless you tick it.
+   **Build cohort (optional)** before confirming: include or exclude rows by
+   code lists across one or more columns (CPT, ICD-10 with or without dots,
+   wildcards such as `M16*`, ranges such as `27130-27132`), by values or by
+   ranges, with a preview of the inclusion flow and a flow diagram.
+   **Confirm** applies the cohort, splits, handles missing data, and saves the
+   partitions, locking the config into the session.
 
 2. **Data Summary**: auto-populates after confirm. Continuous vars: N, %
    missing, mean, median, SD, IQR, min, max. Binary/categorical: N, % missing,
@@ -204,14 +246,29 @@ Flask session"); everything heavy lives on disk so it survives restarts.
    training set (**CV folds**) instead of the single validation set. You can also
    upload your own train and validation CSVs. **SSE streams live progress.** Binary metrics:
    AUROC, AUPRC, sensitivity, specificity, PPV, NPV, F1, Brier. Continuous: MAE,
-   RMSE, R². Feature importance is shown as a PNG and exported as CSV. Models
-   save as pickles to `models/`.
+   RMSE, R². Every binary metric comes with a 95 % CI, plus calibration slope,
+   calibration-in-the-large, O:E ratio and ICI. For binary outcomes the decision
+   threshold is chosen on the validation set (Youden by default, or a target
+   sensitivity or specificity, the outcome rate, or a fixed value) and saved with
+   the model; optional logistic recalibration on the validation set. The plain
+   **LogisticRegression** model is unpenalized and also gives a table of adjusted
+   odds ratios with 95 % CIs, reference levels and events per parameter. If the
+   chosen outcome had missing values filled at Confirm, training refuses and asks
+   you to leave that column missing instead. Feature importance is shown as a PNG
+   and exported as CSV. Models save as pickles to `models/`.
 
 4. **Model Testing**: pick saved pickles (or upload one) and a held-out test
    set or new CSV. Get a metrics table plus matplotlib **ROC, PR, confusion,
    calibration** (binary), **one-vs-rest ROC / PR per class** (multiclass), or
    **residuals, predicted-vs-actual** (regression). Multiple binary models
-   **overlay** on one ROC / PR chart. Download PNG / CSV. **Single
+   **overlay** on one ROC / PR chart. Each model uses the threshold saved at
+   training unless you type another. Binary models get a flexible (lowess)
+   calibration curve with a histogram of predicted risks and a plain-language
+   calibration summary, and all binary models share a **decision curve** (net
+   benefit against treat all and treat none). The internal test partition is
+   locked after its first use; testing a new model on it asks for a reason, which
+   is logged. Testing on an uploaded CSV is logged as external validation.
+   Download PNG / PDF / CSV. **Single
    prediction:** pick a model, fill the auto-built input form (or upload a
    model `.pkl` + a `.json` row) → predicted outcome with probability and a
    plain-language explanation.
@@ -222,20 +279,38 @@ Flask session"); everything heavy lives on disk so it survives restarts.
    `cr()` adds boundary knots at the minimum and maximum of the predictor on top
    of the interior knots, so the curve is not identical to `rms::rcs()`.
 
-6. **Clinical Epi**: OR / RR / NNT / NNH from a 2×2 table (with CIs, χ², and a
-   Haldane-Anscombe correction for zero cells); Kaplan-Meier (with log-rank) and
-   Cox proportional hazards via **lifelines**; Hosmer-Lemeshow goodness-of-fit
-   with a calibration-by-decile chart from a saved binary model.
+6. **Clinical Epi**: OR / RR / NNT / NNH from a 2×2 table (with CIs, the risk
+   difference CI, NNT CI after Altman, χ² and Fisher's exact test; the
+   Haldane-Anscombe correction is applied to OR and RR only when a cell is zero);
+   Kaplan-Meier with an at-risk table, median survival with CI, survival at
+   chosen times and a log-rank test for any number of groups; Cox models with
+   categorical covariates, a chosen reference level and a proportional hazards
+   test (matching R `cox.zph`); **competing risks** (Aalen-Johansen cumulative
+   incidence with CIs and Gray's test, shown against the naive 1 minus
+   Kaplan-Meier curve, for example revision with death as a competing event);
+   **sample size** for developing a prediction model (Riley et al., BMJ 2020),
+   with a check against the loaded data; and Hosmer-Lemeshow from a saved
+   binary model.
 
 7. **Reports**: a methods paragraph and a TRIPOD+AI coverage table, both built
    from the session's analysis log. Every sentence comes from a fixed template, so
    the same log always gives the same text. The TRIPOD+AI table only says what the
-   log can show was run, it does not replace the published checklist.
+   log can show was run, it does not replace the published checklist. Each log
+   entry stores the SHA-256 hash of the line before it, and the Reports tab checks
+   that chain, so an edited or deleted entry shows up.
+
+**Leakage demo (teaching):** pick a binary outcome and a model, and the app
+trains it the right way and in common wrong ways (SMOTE before the split,
+preprocessing before the split, settings picked on the test set, scoring on
+the training patients, SMOTE inside the training fold) on your own data. Each
+version is scored on a lockbox of patients none of them touched, so you can see
+how much each mistake inflates the AUROC it would report, and what it does to
+calibration. Random forest shows the effect most clearly.
 
 ### The 15 models
-*Classifiers (binary/categorical):* Logistic, Ridge-Logistic, Lasso-Logistic,
-ElasticNet-Logistic, KNN, Decision Tree, Random Forest, Gradient Boosting, SVM,
-Naïve Bayes.
+*Classifiers (binary/categorical):* Logistic (unpenalized), Ridge-Logistic,
+Lasso-Logistic, ElasticNet-Logistic, KNN, Decision Tree, Random Forest, Gradient
+Boosting, SVM (probabilities from sigmoid calibration), Naïve Bayes.
 *Regressors (continuous):* Linear, Ridge, Lasso, ElasticNet, Random-Forest
 Regressor.
 
@@ -261,6 +336,7 @@ Regressor.
 | POST | `/epi/or` · `/epi/nnt` · `/epi/km` · `/epi/cox` · `/epi/hl` | clinical epi |
 | POST | `/render/pdf` | render any chart spec as a downloadable PDF |
 | GET  | `/report/methods` · `/report/tripod` | methods text and TRIPOD+AI coverage from the analysis log |
+| GET  | `/report/verify-log` | check the analysis log's hash chain |
 
 ---
 
@@ -269,7 +345,7 @@ Regressor.
 ### Done & verified end-to-end (compute + live HTTP)
 - [x] Upload → auto column typing (binary/categorical/continuous/date) →
       missing-data handling (impute / zero / include / remove) → overrides.
-- [x] Confirm: random **and** stratified 70/15/15 split, SMOTE hint, saved
+- [x] Confirm: random **and** stratified 70/15/15 split, class imbalance note, saved
       partitions, session lock.
 - [x] Data summary card + continuous & categorical tables, CSV export.
 - [x] Training: all **15** models, validation-set grid search (leakage-free
@@ -286,8 +362,20 @@ Regressor.
 
 ### Known limitations / next steps (good "continue-it-yourself" list)
 - **Confounding variables** are kept as ordinary features and tagged in the model
-  metadata and the analysis log; they are not given special statistical
-  treatment (e.g. forced-in adjusted models).
+  metadata and the analysis log. The unpenalized LogisticRegression model gives
+  adjusted odds ratios for every feature, confounders included; there is no
+  separate exposure-focused model yet.
+- **Internal validation** is a single random train/validation/test split.
+  Bootstrap optimism correction on all the data (preferred by Collins et al.,
+  BMJ 2024) is not built yet, and the TRIPOD+AI table says so.
+- **Not yet available:** multiple imputation, Fine-Gray regression (cumulative
+  incidence and Gray's test are), propensity score methods, MCID calculations,
+  and sample size for time-to-event outcomes.
+- **Adjusted odds ratios** are fitted on the original training rows. If SMOTE is
+  on, the LogisticRegression pipeline itself is fitted on resampled rows, so its
+  coefficients differ from the table.
+- **The CLI** runs the same analysis functions but does not write the analysis
+  log, so CLI runs don't appear in the methods text or TRIPOD+AI table.
 - **SMOTE timing:** the toggle at *Confirm* records a preference, but SMOTE is
   applied at *training* time to the training fold only (it needs the chosen
   outcome, which is picked later). Both the Confirm and Training screens expose
@@ -302,10 +390,15 @@ Regressor.
   set is never touched by the search itself, only by the metrics reported
   afterward.
 - **Spline CI** is the GLM linear-predictor (log-odds) confidence band.
-- **Test set reuse** is logged, not prevented: nothing stops you from testing,
-  changing the model and testing again on the same held-out partition.
-- **Missing-data item in the TRIPOD+AI report** is marked "not applicable" when
-  no per-column decision was logged, whether or not the data had missing values.
+- **Test set lock:** the first time the held-out test partition is used, it is
+  locked to the models tested then. Re-testing those models (for example at a new
+  threshold) is fine; testing any other model on it (Model Testing or
+  Hosmer-Lemeshow) asks for a reason, which is written to the analysis log and the
+  methods text. The lock survives a re-split, because the old test rows have
+  already been seen. External CSVs are never locked.
+- **Log integrity** is tamper evident, not tamper proof: editing, inserting or
+  deleting an entry before the last one breaks the hash chain, but rewriting the
+  whole chain or the last entry is not detected.
 - **Security.** There is no authentication or user isolation, and loading a model
   (`/api/model/upload`, `/api/predict-single`) unpickles it, which runs code
   contained in the file. Only load model files you trust, keep the server on
@@ -339,8 +432,14 @@ answer is visible to future users with the same question.
 
 ## Citing
 
-If you use ClinTAB-ML, please cite it using `CITATION.cff` (GitHub's "Cite this
-repository" button reads it).
+If you use ClinTAB-ML, please cite the version you used. Every release is archived on
+Zenodo, and https://doi.org/10.5281/zenodo.23697356 always points to the newest one,
+with links to each version and its own DOI. For example:
+
+> Ravindran D, Ravindran K, Abbas A. ClinTAB-ML: a clinical machine-learning web app
+> for tabular registry data. Version 1.0.0. Zenodo; 2026. doi:10.5281/zenodo.23697358
+
+GitHub's "Cite this repository" button gives the same details from `CITATION.cff`.
 
 ---
 
