@@ -127,3 +127,7 @@ dmypy.json
 ._*
 Thumbs.db
 desktop.ini
+
+# local secrets
+env
+.env
