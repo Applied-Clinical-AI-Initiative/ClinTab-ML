@@ -48,3 +48,24 @@ def test_session_listing_ignores_stray_files_like_ds_store(tmp_path, monkeypatch
     assert [s["session_id"] for s in store.list_sessions()] == ["abc123"]
     store.delete_all_sessions()
     assert store.list_sessions() == []
+
+
+def test_replace_file_waits_out_a_brief_lock(tmp_path, monkeypatch):
+    src, dst = tmp_path / "a.tmp", tmp_path / "a.json"
+    src.write_text("new")
+    real, fails = store.os.replace, {"n": 2}
+
+    def flaky(a, b):
+        if fails["n"]:
+            fails["n"] -= 1
+            raise PermissionError("locked")
+        real(a, b)
+
+    monkeypatch.setattr(store.os, "replace", flaky)
+    monkeypatch.setattr(store.time, "sleep", lambda s: None)
+    store.replace_file(str(src), str(dst))
+    assert dst.read_text() == "new"
+    fails["n"] = 99
+    src.write_text("again")
+    with pytest.raises(PermissionError):
+        store.replace_file(str(src), str(dst), tries=3)

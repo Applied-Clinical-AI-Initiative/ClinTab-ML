@@ -32,6 +32,20 @@ EXPORTS = os.path.join(RUNTIME, "exports")
 MODELS = os.path.join(BASE, "models")
 
 
+def replace_file(src, dst, tries=10):
+    """os.replace that waits out a brief lock. On Windows a virus scanner,
+    the search indexer or an editor watching the folder can hold the target
+    open for a moment, and the replace then fails with access denied."""
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.05 * (i + 1))
+
+
 def ensure_dirs():
     for d in (RUNTIME, SESSIONS, EXPORTS, MODELS):
         os.makedirs(d, exist_ok=True)
